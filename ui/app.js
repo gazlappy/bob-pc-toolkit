@@ -10,6 +10,8 @@ const state = {
   map: { node: null, trail: [], selected: null, built: false, summary: null },
   registry: { groups: [], selected: new Set(), scanned: false },
   backups: { items: [] },
+  programs: { items: [], search: '', sort: 'size', loaded: false },
+  dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -92,6 +94,7 @@ function show(view) {
 
   if (view === 'startup' && !state.startup.entries.length) loadStartup();
   if (view === 'files' && !state.files.roots.length) loadRoots();
+  if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'backups') loadBackups();
 }
 
@@ -625,25 +628,33 @@ async function loadRoots() {
   } catch {
     state.files.roots = [];
   }
-  const container = $('files-roots');
-  container.replaceChildren();
-  for (const root of state.files.roots) {
-    const label = document.createElement('label');
-    label.className = 'check';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.value = root.id;
-    input.checked = root.default;
-    input.addEventListener('change', () => {
-      // A map built from different folders is stale; ask for a rebuild rather
-      // than leaving a picture that no longer matches the checkboxes.
-      if (state.map.built) invalidateMap('Folders changed — rebuild the map to match.');
-    });
-    const text = document.createElement('span');
-    text.textContent = root.label;
-    label.append(input, text);
-    container.append(label);
-  }
+  // The same folder list drives the Large files tab and the Duplicates tab,
+  // but each keeps its own checkboxes so one does not surprise the other.
+  const fill = (container, onChange) => {
+    container.replaceChildren();
+    for (const root of state.files.roots) {
+      const label = document.createElement('label');
+      label.className = 'check';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = root.id;
+      input.checked = root.default;
+      if (onChange) input.addEventListener('change', onChange);
+      const text = document.createElement('span');
+      text.textContent = root.label;
+      label.append(input, text);
+      container.append(label);
+    }
+  };
+
+  fill($('files-roots'), () => {
+    // A map built from different folders is stale; ask for a rebuild rather
+    // than leaving a picture that no longer matches the checkboxes.
+    if (state.map.built) invalidateMap('Folders changed — rebuild the map to match.');
+  });
+  fill($('dupes-roots'), () => {
+    if (state.dupes.scanned) invalidateDupes('Folders changed — scan again to match.');
+  });
 }
 
 function updateFilesSelection() {
@@ -1157,6 +1168,475 @@ $('map-trash').addEventListener('click', async () => {
   }
 });
 
+/* Programs ----------------------------------------------------------------- */
+
+function visiblePrograms() {
+  const term = state.programs.search.trim().toLowerCase();
+  const items = state.programs.items.filter(
+    (program) => !term || `${program.name} ${program.publisher || ''}`.toLowerCase().includes(term)
+  );
+
+  const sizeOf = (program) => program.measuredBytes ?? program.estimatedBytes ?? -1;
+  if (state.programs.sort === 'name') {
+    items.sort((a, b) => a.name.localeCompare(b.name, 'en-GB', { sensitivity: 'base' }));
+  } else if (state.programs.sort === 'date') {
+    items.sort((a, b) => String(b.installedOn || '').localeCompare(String(a.installedOn || '')));
+  } else {
+    items.sort((a, b) => sizeOf(b) - sizeOf(a));
+  }
+  return items;
+}
+
+function programRow(program) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = program.name;
+
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent =
+    [
+      program.publisher,
+      program.version,
+      program.installedOn &&
+        `installed ${new Date(program.installedOn).toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })}`,
+    ]
+      .filter(Boolean)
+      .join('  ·  ') || 'No publisher recorded';
+  meta.title = program.installLocation || '';
+
+  main.append(name, meta);
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  if (program.missing) {
+    const tag = document.createElement('span');
+    tag.className = 'tag tag-danger';
+    tag.textContent = 'Files missing';
+    tag.title = 'The install folder is gone — this is a leftover entry. Clear it from the Registry tab.';
+    tags.append(tag);
+  }
+  if (program.scope === 'user') {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'Just you';
+    tags.append(tag);
+  }
+
+  const size = document.createElement('div');
+  size.className = 'row-size';
+  const bytes = program.measuredBytes ?? program.estimatedBytes;
+  size.textContent = bytes ? formatBytes(bytes) : '—';
+  if (program.measuredBytes != null) {
+    size.title = 'Measured on disk';
+    size.classList.add('is-measured');
+  } else if (program.estimatedBytes) {
+    size.title = 'As recorded by the installer — press Measure for the real figure';
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+
+  if (program.installLocation && !program.missing) {
+    const measure = document.createElement('button');
+    measure.className = 'btn btn-ghost btn-small';
+    measure.textContent = program.measuredBytes == null ? 'Measure' : 'Re-measure';
+    measure.addEventListener('click', async () => {
+      measure.disabled = true;
+      measure.textContent = 'Measuring…';
+      try {
+        const result = await window.pc.programs.measure(program.id);
+        program.measuredBytes = result.bytes;
+        renderPrograms();
+      } catch (error) {
+        toast(error.message, 'error');
+        measure.disabled = false;
+        measure.textContent = 'Measure';
+      }
+    });
+
+    const show = document.createElement('button');
+    show.className = 'btn btn-ghost btn-small';
+    show.textContent = 'Show folder';
+    show.addEventListener('click', () => {
+      window.pc.programs.reveal(program.id).catch((error) => toast(error.message, 'error'));
+    });
+
+    actions.append(measure, show);
+  }
+
+  const uninstall = document.createElement('button');
+  uninstall.className = 'btn btn-small';
+  uninstall.textContent = 'Uninstall';
+  uninstall.disabled = !program.canUninstall;
+  if (!program.canUninstall) uninstall.title = 'This program did not register an uninstaller.';
+  uninstall.addEventListener('click', async () => {
+    const ok = await confirmAction({
+      title: `Uninstall ${program.name}?`,
+      body: "This opens the program's own uninstaller, which will ask you to confirm. PC Cleanup does not remove any files itself.",
+      confirmLabel: 'Open uninstaller',
+    });
+    if (!ok) return;
+    try {
+      await window.pc.programs.uninstall(program.id);
+      toast(`Opened the uninstaller for ${program.name}. Press Refresh when it finishes.`, 'good');
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+  actions.append(uninstall);
+
+  row.append(main, tags, size, actions);
+  return row;
+}
+
+function renderPrograms() {
+  const list = $('programs-list');
+  list.replaceChildren();
+
+  if (!state.programs.loaded) {
+    list.append(empty('Reading installed programs…'));
+    return;
+  }
+
+  const items = visiblePrograms();
+  if (!items.length) {
+    list.append(empty(state.programs.search ? 'Nothing matches that search.' : 'No installed programs found.'));
+    return;
+  }
+
+  for (const program of items) list.append(programRow(program));
+
+  const known = state.programs.items.filter((p) => p.measuredBytes ?? p.estimatedBytes);
+  const total = known.reduce((sum, p) => sum + (p.measuredBytes ?? p.estimatedBytes), 0);
+  const missing = state.programs.items.filter((p) => p.missing).length;
+  $('programs-subtitle').textContent =
+    `${state.programs.items.length} programs · about ${formatBytes(total)} across the ${known.length} that report a size` +
+    (missing ? ` · ${missing} leftover${missing === 1 ? '' : 's'}` : '');
+  $('nav-programs-count').textContent = String(state.programs.items.length);
+}
+
+async function loadPrograms() {
+  state.programs.loaded = false;
+  renderPrograms();
+  try {
+    state.programs.items = await window.pc.programs.list();
+    state.programs.loaded = true;
+    renderPrograms();
+  } catch (error) {
+    state.programs.loaded = true;
+    $('programs-list').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('programs-refresh').addEventListener('click', loadPrograms);
+$('programs-search').addEventListener('input', (event) => {
+  state.programs.search = event.target.value;
+  renderPrograms();
+});
+$('programs-sort').addEventListener('change', (event) => {
+  state.programs.sort = event.target.value;
+  renderPrograms();
+});
+
+/* Duplicates --------------------------------------------------------------- */
+
+function dupesRootIds() {
+  return [...$('dupes-roots').querySelectorAll('input:checked')].map((input) => input.value);
+}
+
+function invalidateDupes(message) {
+  state.dupes.scanned = false;
+  state.dupes.groups = [];
+  state.dupes.selected.clear();
+  state.dupes.summary = null;
+  $('dupes-groups').replaceChildren(empty(message));
+  $('nav-dupes-count').textContent = '';
+  updateDupesSelection();
+}
+
+/** How many copies of `group` are not marked for deletion. */
+function keptInGroup(group) {
+  return group.files.filter((file) => !state.dupes.selected.has(file.path)).length;
+}
+
+function updateDupesSelection() {
+  const count = state.dupes.selected.size;
+  let bytes = 0;
+  for (const group of state.dupes.groups) {
+    for (const file of group.files) {
+      if (state.dupes.selected.has(file.path)) bytes += group.bytes;
+    }
+  }
+
+  $('dupes-selection').hidden = count === 0;
+  $('dupes-selection-text').textContent = `${count} cop${count === 1 ? 'y' : 'ies'} selected · ${formatBytes(
+    bytes
+  )} to reclaim`;
+  $('dupes-trash').disabled = count === 0;
+}
+
+/** Marks every copy except the one `pick` chooses, for every group. */
+function keepOnly(pick) {
+  state.dupes.selected.clear();
+  for (const group of state.dupes.groups) {
+    const keeper = pick(group.files);
+    for (const file of group.files) {
+      if (file.path !== keeper.path) state.dupes.selected.add(file.path);
+    }
+  }
+  renderDupes();
+}
+
+function renderDupes() {
+  const container = $('dupes-groups');
+  container.replaceChildren();
+
+  if (!state.dupes.scanned) {
+    container.append(empty('Choose your folders, then press Scan.'));
+    return;
+  }
+  if (!state.dupes.groups.length) {
+    container.append(empty('No duplicates found in those folders.'));
+    $('dupes-subtitle').textContent = 'No duplicates found.';
+    $('nav-dupes-count').textContent = '';
+    return;
+  }
+
+  for (const group of state.dupes.groups) {
+    const card = document.createElement('div');
+    card.className = 'dupe-group';
+
+    const head = document.createElement('div');
+    head.className = 'dupe-head';
+    const title = document.createElement('div');
+    title.className = 'dupe-title';
+    title.textContent = `${group.files[0].name}`;
+    const stat = document.createElement('div');
+    stat.className = 'dupe-stat';
+    stat.textContent = `${group.count} copies · ${formatBytes(group.bytes)} each · ${formatBytes(
+      group.wastedBytes
+    )} wasted`;
+    head.append(title, stat);
+    card.append(head);
+
+    const list = document.createElement('div');
+    list.className = 'list';
+
+    for (const file of group.files) {
+      const row = document.createElement('label');
+      row.className = 'row dupe-row';
+
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = state.dupes.selected.has(file.path);
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          // Ticking this one must never be what empties the group.
+          if (keptInGroup(group) <= 1) {
+            input.checked = false;
+            toast('Keep at least one copy of each file.', 'error');
+            return;
+          }
+          state.dupes.selected.add(file.path);
+        } else {
+          state.dupes.selected.delete(file.path);
+        }
+        row.classList.toggle('is-doomed', input.checked);
+        updateDupesSelection();
+      });
+      if (input.checked) row.classList.add('is-doomed');
+
+      const main = document.createElement('div');
+      main.className = 'row-main';
+      const name = document.createElement('div');
+      name.className = 'row-name';
+      name.textContent = file.name;
+      const meta = document.createElement('div');
+      meta.className = 'row-meta';
+      meta.textContent = `${file.folder}  ·  ${formatDate(file.modified)}`;
+      meta.title = file.path;
+      main.append(name, meta);
+
+      const show = document.createElement('button');
+      show.className = 'btn btn-ghost btn-small';
+      show.textContent = 'Show';
+      show.addEventListener('click', (event) => {
+        event.preventDefault();
+        window.pc.files.reveal(file.path).catch((error) => toast(error.message, 'error'));
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      actions.append(show);
+
+      row.append(input, main, actions);
+      list.append(row);
+    }
+
+    card.append(list);
+    container.append(card);
+  }
+
+  const summary = state.dupes.summary;
+  if (summary) {
+    $('dupes-subtitle').textContent =
+      `${summary.duplicateFiles.toLocaleString('en-GB')} duplicate file${
+        summary.duplicateFiles === 1 ? '' : 's'
+      } across ${summary.totalGroups} group${summary.totalGroups === 1 ? '' : 's'} · ` +
+      `${formatBytes(summary.wastedBytes)} reclaimable` +
+      (summary.truncated ? ` (showing the ${state.dupes.groups.length} biggest)` : '');
+    $('nav-dupes-count').textContent = formatBytes(summary.wastedBytes);
+  }
+  updateDupesSelection();
+}
+
+window.pc.dupes.onProgress(({ phase, scanned, done, total }) => {
+  const fill = $('dupes-progress-fill');
+  const label = $('dupes-progress-label');
+  if (phase === 'listing') {
+    fill.style.width = '8%';
+    label.textContent = `Listing files… ${scanned.toLocaleString('en-GB')} checked`;
+  } else if (phase === 'sampling') {
+    fill.style.width = `${10 + (total ? (done / total) * 40 : 0)}%`;
+    label.textContent = `Comparing the first 64 KB… ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`;
+  } else if (phase === 'hashing') {
+    fill.style.width = `${55 + (total ? (done / total) * 40 : 0)}%`;
+    label.textContent = `Checking full contents… ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`;
+  } else {
+    fill.style.width = '100%';
+    label.textContent = 'Finishing…';
+  }
+});
+
+$('dupes-scan').addEventListener('click', async () => {
+  const rootIds = dupesRootIds();
+  if (!rootIds.length) {
+    toast('Pick at least one folder to search.', 'error');
+    return;
+  }
+
+  $('dupes-scan').disabled = true;
+  $('dupes-trash').disabled = true;
+  $('dupes-progress').hidden = false;
+  $('dupes-progress-fill').style.width = '0%';
+  $('dupes-groups').replaceChildren();
+
+  try {
+    const result = await window.pc.dupes.scan({
+      rootIds,
+      minBytes: Math.round(Number($('dupes-min').value) * 1024 * 1024),
+    });
+    state.dupes.groups = result.groups;
+    state.dupes.summary = result;
+    state.dupes.selected.clear();
+    state.dupes.scanned = true;
+    renderDupes();
+
+    if (result.totalGroups > 0) {
+      toast(
+        `${formatBytes(result.wastedBytes)} reclaimable — checked ${result.scannedFiles.toLocaleString(
+          'en-GB'
+        )} files, read ${result.fullyHashed.toLocaleString('en-GB')} in full.`,
+        'good'
+      );
+    }
+  } catch (error) {
+    $('dupes-groups').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  } finally {
+    $('dupes-progress').hidden = true;
+    $('dupes-scan').disabled = false;
+  }
+});
+
+// Usually the most useful rule: the copy nearest the top of the tree is the
+// one you filed deliberately, and the deeper ones are what a backup folder or
+// a "(1)" download left behind.
+$('dupes-keep-shallowest').addEventListener('click', () =>
+  keepOnly((files) =>
+    files.reduce((best, file) => {
+      const depth = (p) => p.split('\\').length;
+      if (depth(file.path) !== depth(best.path)) return depth(file.path) < depth(best.path) ? file : best;
+      return file.path.length < best.path.length ? file : best;
+    })
+  )
+);
+$('dupes-keep-newest').addEventListener('click', () =>
+  keepOnly((files) => files.reduce((best, file) => (file.modified > best.modified ? file : best)))
+);
+$('dupes-keep-oldest').addEventListener('click', () =>
+  keepOnly((files) => files.reduce((best, file) => (file.modified < best.modified ? file : best)))
+);
+$('dupes-select-none').addEventListener('click', () => {
+  state.dupes.selected.clear();
+  renderDupes();
+});
+
+$('dupes-trash').addEventListener('click', async () => {
+  const paths = [...state.dupes.selected];
+  if (!paths.length) return;
+
+  const bytes = state.dupes.groups.reduce(
+    (sum, group) => sum + group.files.filter((f) => paths.includes(f.path)).length * group.bytes,
+    0
+  );
+
+  const ok = await confirmAction({
+    title: `Move ${paths.length} cop${paths.length === 1 ? 'y' : 'ies'} to the Recycle Bin?`,
+    body: `${formatBytes(
+      bytes
+    )} reclaimed. One copy of every file is kept, and everything moved stays in the Recycle Bin until you empty it.`,
+    confirmLabel: 'Move to Recycle Bin',
+    danger: false,
+  });
+  if (!ok) return;
+
+  $('dupes-trash').disabled = true;
+  try {
+    const result = await window.pc.dupes.trash(paths);
+    toast(
+      `Moved ${result.moved.length} cop${result.moved.length === 1 ? 'y' : 'ies'} to the Recycle Bin` +
+        `${result.failed.length ? ` · ${result.failed.length} could not be moved` : ''}.`,
+      result.failed.length ? 'error' : 'good'
+    );
+
+    const gone = new Set(result.moved.map((p) => p.toLowerCase()));
+    for (const group of state.dupes.groups) {
+      group.files = group.files.filter((file) => !gone.has(file.path.toLowerCase()));
+      group.count = group.files.length;
+      group.wastedBytes = group.bytes * Math.max(0, group.files.length - 1);
+    }
+    state.dupes.groups = state.dupes.groups.filter((group) => group.files.length > 1);
+    state.dupes.selected.clear();
+    if (state.dupes.summary) {
+      state.dupes.summary = {
+        ...state.dupes.summary,
+        totalGroups: state.dupes.groups.length,
+        duplicateFiles: state.dupes.groups.reduce((sum, g) => sum + g.count - 1, 0),
+        wastedBytes: state.dupes.groups.reduce((sum, g) => sum + g.wastedBytes, 0),
+      };
+    }
+    renderDupes();
+    loadOverview();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('dupes-trash').disabled = false;
+  }
+});
+
 /* Registry ----------------------------------------------------------------- */
 
 function updateRegistrySelection() {
@@ -1444,3 +1924,4 @@ loadRoots();
 loadBackups();
 renderFiles();
 renderRegistry();
+renderDupes();

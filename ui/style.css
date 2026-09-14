@@ -746,6 +746,60 @@ select:focus {
   gap: 8px 16px;
 }
 
+/* Duplicates & programs ---------------------------------------------------- */
+
+.dupe-group {
+  margin-bottom: 18px;
+}
+
+.dupe-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.dupe-title {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dupe-stat {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.dupe-row input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--danger);
+  margin: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+/* A row marked for deletion should be unmistakable before the confirm. */
+.dupe-row.is-doomed {
+  background: rgba(240, 86, 63, 0.07);
+}
+
+.dupe-row.is-doomed .row-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+  color: var(--muted);
+}
+
+.row-size.is-measured {
+  color: var(--text);
+}
+
 /* Treemap ----------------------------------------------------------------- */
 
 .segmented {

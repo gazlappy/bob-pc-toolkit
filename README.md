@@ -47,6 +47,17 @@ prefetch, crash dumps and error reports, thumbnail/icon cache, Chrome, Edge,
 Firefox and Brave caches, and the Recycle Bin. Every row shows its size and file
 count before anything happens.
 
+**Programs** — everything installed, biggest first, read from the same Uninstall
+keys the registry scan walks. Uninstalling launches the program's own
+uninstaller; this app never removes a program's files itself. Recorded sizes are
+whatever the installer chose to write — often absent and frequently wrong — so
+**Measure** walks the install folder for the real figure. Entries whose folder
+has gone are tagged *Files missing*.
+
+**Duplicates** — files whose contents are byte-for-byte identical, grouped with
+the biggest waste first. See below for how it avoids reading everything, and for
+the one mistake it will not let you make.
+
 **Registry** — finds entries that point at programs which are no longer
 installed: leftover Add/Remove Programs entries, App Paths, shared-DLL
 reference counts, cached program names, and startup entries whose target is
@@ -136,8 +147,49 @@ src/files.js    large/old file scan, known-folder resolution, Recycle Bin
 src/registry.js registry scan and clean
 src/backup.js   .reg restore points: write, list, restore, discard
 src/treemap.js  size tree for the map, pruned per-node for the renderer
+src/duplicates.js  three-pass duplicate detection
+src/programs.js installed programs: list, measure on disk, launch uninstaller
 ui/             index.html, style.css, app.js, treemap.js
 ```
+
+### Deliberately not included
+
+- **Services.** Disabling the wrong one breaks a machine in ways that are hard
+  to diagnose, and the space saved is nil.
+- **Hibernation file, page file and System Restore allocation.** These are often
+  the biggest single items on a disk, but a standard user cannot even read their
+  sizes, so the screen would mostly say "restart as administrator" — and the one
+  large item that *is* readable, `C:\Windows\Installer`, must never be deleted,
+  since it is what every uninstaller and repair reads from. Showing that number
+  next to a delete button would do more harm than the feature is worth.
+- **Browser history, cookies and saved logins.** Only caches are cleared; the
+  things that sign you in and remember where you have been are left alone.
+
+### Finding duplicates
+
+Hashing every file would be unbearable, so candidates are narrowed in three
+passes, each more expensive than the last and each run on far fewer files:
+
+1. **group by exact size** — no reads at all, and it eliminates almost everything;
+2. **hash the first 64 KB** — one short read, which separates same-size files
+   that merely happen to collide on length;
+3. **hash the whole file** — only ever runs on what survived both.
+
+A partial hash alone is not proof, so pass 3 is not optional: two files can
+share their first 64 KB and differ in the last byte, and the test suite has
+exactly that pair in it.
+
+Folders whose duplicates are meant to exist — `node_modules`, `.git`, `venv`,
+`__pycache__` and friends — are skipped. Deleting a copy out of one of those
+breaks whatever owns it, and a Documents folder full of code projects is mostly
+made of them.
+
+**A group can never lose every copy.** The UI refuses to tick the last one, and
+the main process re-checks before deleting anything, so a stale selection cannot
+get past it either. Copies go to the Recycle Bin like everything else here.
+*Keep the original* selects by depth — the copy nearest the top of the tree is
+usually the one you filed deliberately, and the deeper ones are what a backup
+folder or a `(1)` download left behind.
 
 ### The treemap
 

@@ -11,6 +11,8 @@ const files = require('./src/files');
 const registry = require('./src/registry');
 const backup = require('./src/backup');
 const treemap = require('./src/treemap');
+const duplicates = require('./src/duplicates');
+const programs = require('./src/programs');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -88,6 +90,14 @@ handle('files:reveal', (target) => files.reveal(target));
 
 handle('map:scan', (options) => treemap.scan(options || {}, progress('map:progress')));
 handle('map:node', (target) => ({ node: treemap.node(target), trail: treemap.trail(target) }));
+
+handle('dupes:scan', (options) => duplicates.scan(options || {}, progress('dupes:progress')));
+handle('dupes:trash', (paths) => duplicates.trash(Array.isArray(paths) ? paths : []));
+
+handle('programs:list', () => programs.list());
+handle('programs:measure', (id) => programs.measure(id));
+handle('programs:uninstall', (id) => programs.uninstall(id));
+handle('programs:reveal', (id) => programs.reveal(id));
 
 handle('registry:scan', () => registry.scan(progress('registry:progress')));
 handle('registry:clean', (ids) => registry.clean(Array.isArray(ids) ? ids : []));

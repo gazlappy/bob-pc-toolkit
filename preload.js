@@ -35,6 +35,23 @@ contextBridge.exposeInMainWorld('pc', {
     },
   },
 
+  dupes: {
+    scan: (options) => call('dupes:scan', options),
+    trash: (paths) => call('dupes:trash', paths),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('dupes:progress', listener);
+      return () => ipcRenderer.removeListener('dupes:progress', listener);
+    },
+  },
+
+  programs: {
+    list: () => call('programs:list'),
+    measure: (id) => call('programs:measure', id),
+    uninstall: (id) => call('programs:uninstall', id),
+    reveal: (id) => call('programs:reveal', id),
+  },
+
   registry: {
     scan: () => call('registry:scan'),
     clean: (ids) => call('registry:clean', ids),

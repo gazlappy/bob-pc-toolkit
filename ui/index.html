@@ -21,6 +21,10 @@
             <span class="nav-dot"></span>Startup
             <span class="nav-count" id="nav-startup-count"></span>
           </button>
+          <button class="nav-item" data-view="programs">
+            <span class="nav-dot"></span>Programs
+            <span class="nav-count" id="nav-programs-count"></span>
+          </button>
           <button class="nav-item" data-view="cleanup">
             <span class="nav-dot"></span>Cleanup
             <span class="nav-count" id="nav-cleanup-count"></span>
@@ -31,6 +35,10 @@
           </button>
           <button class="nav-item" data-view="files">
             <span class="nav-dot"></span>Large files
+          </button>
+          <button class="nav-item" data-view="dupes">
+            <span class="nav-dot"></span>Duplicates
+            <span class="nav-count" id="nav-dupes-count"></span>
           </button>
           <button class="nav-item" data-view="backups">
             <span class="nav-dot"></span>Backups
@@ -82,7 +90,8 @@
             <ul class="notes">
               <li>Startup items are <strong>disabled, not deleted</strong> — the same reversible switch Task Manager uses. Turn one back on any time.</li>
               <li>Cleanup always <strong>scans and shows you sizes first</strong>. Nothing is removed until you tick it and press Clean.</li>
-              <li>Large files are moved to the <strong>Recycle Bin</strong>, never deleted outright.</li>
+              <li>Large files and duplicate copies are moved to the <strong>Recycle Bin</strong>, never deleted outright — and a duplicate group can never lose <strong>every</strong> copy.</li>
+              <li>Uninstalling runs <strong>the program's own uninstaller</strong>; this app never removes a program's files itself.</li>
               <li>Files that are open or in use are skipped rather than forced.</li>
             </ul>
           </div>
@@ -280,6 +289,82 @@
           </header>
 
           <div class="list" id="backups-list"></div>
+        </section>
+        <!-- Programs -->
+        <section class="view" id="view-programs">
+          <header class="view-head">
+            <div>
+              <h1>Programs</h1>
+              <p class="subtitle" id="programs-subtitle">Everything installed, biggest first.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="programs-search" type="search" placeholder="Search…" />
+              <select id="programs-sort">
+                <option value="size">Biggest first</option>
+                <option value="name">By name</option>
+                <option value="date">Recently installed</option>
+              </select>
+              <button class="btn btn-ghost" id="programs-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div class="panel note-panel">
+            <h2>How this works</h2>
+            <ul class="notes">
+              <li>Uninstalling runs <strong>the program's own uninstaller</strong> — this app never removes files on its behalf.</li>
+              <li>Sizes come from what the installer recorded, which is often wrong or missing. <strong>Measure</strong> walks the folder for the real figure.</li>
+              <li>Rows tagged <strong>Files missing</strong> are leftovers — the program is gone but its entry remains. The Registry tab clears those.</li>
+            </ul>
+          </div>
+
+          <div class="list" id="programs-list"></div>
+        </section>
+
+        <!-- Duplicates -->
+        <section class="view" id="view-dupes">
+          <header class="view-head">
+            <div>
+              <h1>Duplicate files</h1>
+              <p class="subtitle" id="dupes-subtitle">Find files whose contents are identical, and keep just one.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="dupes-scan">Scan</button>
+              <button class="btn btn-primary" id="dupes-trash" disabled>Move to Recycle Bin</button>
+            </div>
+          </header>
+
+          <div class="panel filters">
+            <div class="filter">
+              <label for="dupes-min">Ignore files under</label>
+              <select id="dupes-min">
+                <option value="0.1">100 KB</option>
+                <option value="1" selected>1 MB</option>
+                <option value="10">10 MB</option>
+                <option value="100">100 MB</option>
+              </select>
+            </div>
+            <div class="filter filter-grow">
+              <label>Folders</label>
+              <div class="root-checks" id="dupes-roots"></div>
+            </div>
+          </div>
+
+          <div class="progress" id="dupes-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="dupes-progress-fill"></div></div>
+            <div class="progress-label" id="dupes-progress-label"></div>
+          </div>
+
+          <div class="selection-bar" id="dupes-selection" hidden>
+            <span id="dupes-selection-text"></span>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-small" id="dupes-keep-shallowest">Keep the original</button>
+              <button class="btn btn-ghost btn-small" id="dupes-keep-newest">Keep newest</button>
+              <button class="btn btn-ghost btn-small" id="dupes-keep-oldest">Keep oldest</button>
+              <button class="btn btn-ghost btn-small" id="dupes-select-none">Clear</button>
+            </div>
+          </div>
+
+          <div id="dupes-groups"></div>
         </section>
       </main>
     </div>
