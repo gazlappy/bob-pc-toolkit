@@ -1,0 +1,7 @@
+# Normalise line endings in the repo; check out native on Windows.
+* text=auto
+
+# Binary assets git should never touch.
+*.ico binary
+*.png binary
+*.exe binary
