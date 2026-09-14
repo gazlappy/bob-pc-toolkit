@@ -1,0 +1,76 @@
+'use strict';
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+// Unwraps the { ok, data | error } envelope from main so callers can just await
+// a value and catch a normal Error.
+async function call(channel, ...args) {
+  const result = await ipcRenderer.invoke(channel, ...args);
+  if (!result || result.ok !== true) {
+    throw new Error((result && result.error) || 'Something went wrong.');
+  }
+  return result.data;
+}
+
+contextBridge.exposeInMainWorld('pc', {
+  overview: () => call('sys:overview'),
+  elevate: () => call('sys:elevate'),
+
+  startup: {
+    list: () => call('startup:list'),
+    tasks: () => call('startup:tasks'),
+    setEnabled: (id, enabled) => call('startup:setEnabled', id, enabled),
+    remove: (id) => call('startup:remove', id),
+    reveal: (id) => call('startup:reveal', id),
+    setTaskEnabled: (taskPath, name, enabled) => call('task:setEnabled', taskPath, name, enabled),
+  },
+
+  map: {
+    scan: (options) => call('map:scan', options),
+    node: (target) => call('map:node', target),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('map:progress', listener);
+      return () => ipcRenderer.removeListener('map:progress', listener);
+    },
+  },
+
+  registry: {
+    scan: () => call('registry:scan'),
+    clean: (ids) => call('registry:clean', ids),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('registry:progress', listener);
+      return () => ipcRenderer.removeListener('registry:progress', listener);
+    },
+  },
+
+  backups: {
+    list: () => call('backup:list'),
+    restore: (id) => call('backup:restore', id),
+    remove: (id) => call('backup:remove', id),
+    reveal: (id) => call('backup:reveal', id),
+  },
+
+  clean: {
+    scan: () => call('clean:scan'),
+    run: (ids) => call('clean:run', ids),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('clean:progress', listener);
+      return () => ipcRenderer.removeListener('clean:progress', listener);
+    },
+  },
+
+  files: {
+    roots: () => call('files:roots'),
+    scan: (options) => call('files:scan', options),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('files:progress', listener);
+      return () => ipcRenderer.removeListener('files:progress', listener);
+    },
+    trash: (paths) => call('files:trash', paths),
+    reveal: (target) => call('files:reveal', target),
+  },
+});

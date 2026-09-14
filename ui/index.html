@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'" />
+    <title>PC Cleanup</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="titlebar">
+      <span class="titlebar-name">PC Cleanup</span>
+    </div>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <nav id="nav">
+          <button class="nav-item is-active" data-view="overview">
+            <span class="nav-dot"></span>Overview
+          </button>
+          <button class="nav-item" data-view="startup">
+            <span class="nav-dot"></span>Startup
+            <span class="nav-count" id="nav-startup-count"></span>
+          </button>
+          <button class="nav-item" data-view="cleanup">
+            <span class="nav-dot"></span>Cleanup
+            <span class="nav-count" id="nav-cleanup-count"></span>
+          </button>
+          <button class="nav-item" data-view="registry">
+            <span class="nav-dot"></span>Registry
+            <span class="nav-count" id="nav-registry-count"></span>
+          </button>
+          <button class="nav-item" data-view="files">
+            <span class="nav-dot"></span>Large files
+          </button>
+          <button class="nav-item" data-view="backups">
+            <span class="nav-dot"></span>Backups
+            <span class="nav-count" id="nav-backups-count"></span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="admin-card" id="admin-card">
+            <div class="admin-state" id="admin-state">Checking permissions…</div>
+            <button class="btn btn-ghost btn-small" id="elevate" hidden>Restart as administrator</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <!-- Overview -->
+        <section class="view is-active" id="view-overview">
+          <header class="view-head">
+            <div>
+              <h1>Overview</h1>
+              <p class="subtitle" id="overview-subtitle">Reading your system…</p>
+            </div>
+            <button class="btn btn-ghost" id="overview-refresh">Refresh</button>
+          </header>
+
+          <div class="disks" id="disks"></div>
+
+          <div class="tiles">
+            <button class="tile" data-goto="startup">
+              <div class="tile-value" id="tile-startup">—</div>
+              <div class="tile-label">Programs running at startup</div>
+              <div class="tile-note" id="tile-startup-note">Tap to review them</div>
+            </button>
+            <button class="tile" data-goto="cleanup">
+              <div class="tile-value" id="tile-cleanup">—</div>
+              <div class="tile-label">Junk found on this PC</div>
+              <div class="tile-note" id="tile-cleanup-note">Scan to find out</div>
+            </button>
+            <button class="tile" data-goto="files">
+              <div class="tile-value" id="tile-files">—</div>
+              <div class="tile-label">In large or forgotten files</div>
+              <div class="tile-note" id="tile-files-note">Scan Downloads and Desktop</div>
+            </button>
+          </div>
+
+          <div class="panel note-panel">
+            <h2>How this app behaves</h2>
+            <ul class="notes">
+              <li>Startup items are <strong>disabled, not deleted</strong> — the same reversible switch Task Manager uses. Turn one back on any time.</li>
+              <li>Cleanup always <strong>scans and shows you sizes first</strong>. Nothing is removed until you tick it and press Clean.</li>
+              <li>Large files are moved to the <strong>Recycle Bin</strong>, never deleted outright.</li>
+              <li>Files that are open or in use are skipped rather than forced.</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Startup -->
+        <section class="view" id="view-startup">
+          <header class="view-head">
+            <div>
+              <h1>Startup programs</h1>
+              <p class="subtitle" id="startup-subtitle">Everything that launches when you sign in.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="startup-search" type="search" placeholder="Search…" />
+              <button class="btn btn-ghost" id="startup-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div class="list" id="startup-list"></div>
+
+          <header class="view-head view-head-sub">
+            <div>
+              <h2>Scheduled tasks that run at sign-in</h2>
+              <p class="subtitle">Updaters and helpers often hide here rather than in the list above.</p>
+            </div>
+            <label class="check inline">
+              <input type="checkbox" id="tasks-show-windows" />
+              <span>Include built-in Windows tasks</span>
+            </label>
+          </header>
+
+          <div class="list" id="tasks-list"></div>
+        </section>
+
+        <!-- Cleanup -->
+        <section class="view" id="view-cleanup">
+          <header class="view-head">
+            <div>
+              <h1>Cleanup</h1>
+              <p class="subtitle" id="cleanup-subtitle">Scan to see what can be reclaimed.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="cleanup-scan">Scan</button>
+              <button class="btn btn-primary" id="cleanup-run" disabled>Clean selected</button>
+            </div>
+          </header>
+
+          <div class="progress" id="cleanup-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="cleanup-progress-fill"></div></div>
+            <div class="progress-label" id="cleanup-progress-label"></div>
+          </div>
+
+          <div class="selection-bar" id="cleanup-selection" hidden>
+            <span id="cleanup-selection-text"></span>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-small" id="cleanup-select-safe">Select safe items</button>
+              <button class="btn btn-ghost btn-small" id="cleanup-select-none">Clear</button>
+            </div>
+          </div>
+
+          <div id="cleanup-groups"></div>
+        </section>
+
+        <!-- Registry -->
+        <section class="view" id="view-registry">
+          <header class="view-head">
+            <div>
+              <h1>Registry</h1>
+              <p class="subtitle" id="registry-subtitle">Scan for entries that point at programs which are no longer installed.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="registry-scan">Scan</button>
+              <button class="btn btn-primary" id="registry-clean" disabled>Clean selected</button>
+            </div>
+          </header>
+
+          <div class="panel note-panel">
+            <h2>What this does and does not touch</h2>
+            <ul class="notes">
+              <li>An entry is only listed when it names a <strong>real path that is definitely not there</strong>. No guessing at what looks unused.</li>
+              <li>Paths on <strong>unplugged drives and offline network shares are ignored</strong>, so a disconnected disk never looks like junk.</li>
+              <li><strong>Everything removed is backed up first</strong> to a .reg file you can restore from the Backups tab.</li>
+              <li>Deliberately left alone: file associations, COM/CLSID registrations, and anything Windows Installer manages — that is where registry cleaners break machines.</li>
+            </ul>
+          </div>
+
+          <div class="progress" id="registry-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="registry-progress-fill"></div></div>
+            <div class="progress-label" id="registry-progress-label"></div>
+          </div>
+
+          <div class="selection-bar" id="registry-selection" hidden>
+            <span id="registry-selection-text"></span>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-small" id="registry-select-all">Select all</button>
+              <button class="btn btn-ghost btn-small" id="registry-select-none">Clear</button>
+            </div>
+          </div>
+
+          <div id="registry-groups"></div>
+        </section>
+
+        <!-- Large files -->
+        <section class="view" id="view-files">
+          <header class="view-head">
+            <div>
+              <h1>Large &amp; forgotten files</h1>
+              <p class="subtitle">Nothing here is deleted — selected files go to the Recycle Bin.</p>
+            </div>
+            <div class="head-actions">
+              <div class="segmented" id="files-mode">
+                <button class="segment is-active" data-mode="list">List</button>
+                <button class="segment" data-mode="map">Map</button>
+              </div>
+              <button class="btn btn-ghost" id="files-scan">Scan</button>
+              <button class="btn btn-primary" id="files-trash" disabled>Move to Recycle Bin</button>
+            </div>
+          </header>
+
+          <div class="panel filters">
+            <div class="filter">
+              <label for="files-min">Larger than</label>
+              <select id="files-min">
+                <option value="0">Any size</option>
+                <option value="1">1 MB</option>
+                <option value="10">10 MB</option>
+                <option value="50">50 MB</option>
+                <option value="100" selected>100 MB</option>
+                <option value="500">500 MB</option>
+                <option value="1024">1 GB</option>
+              </select>
+            </div>
+            <div class="filter">
+              <label for="files-age">Untouched for</label>
+              <select id="files-age">
+                <option value="0" selected>Any length of time</option>
+                <option value="90">3 months</option>
+                <option value="180">6 months</option>
+                <option value="365">1 year</option>
+              </select>
+            </div>
+            <div class="filter filter-grow">
+              <label>Folders</label>
+              <div class="root-checks" id="files-roots"></div>
+            </div>
+          </div>
+
+          <div class="selection-bar" id="files-selection" hidden>
+            <span id="files-selection-text"></span>
+            <button class="btn btn-ghost btn-small" id="files-select-none">Clear selection</button>
+          </div>
+
+          <div class="list" id="files-list"></div>
+
+          <div id="files-map" hidden>
+            <div class="map-bar">
+              <div class="crumbs" id="map-crumbs"></div>
+              <div class="map-legend" id="map-legend"></div>
+            </div>
+            <div class="map-summary" id="map-summary"></div>
+
+            <div class="map-frame">
+              <canvas id="map-canvas"></canvas>
+              <div class="map-tip" id="map-tip" hidden></div>
+              <div class="map-overlay" id="map-overlay">
+                <p>Every rectangle is sized by how much space it takes.</p>
+                <button class="btn btn-primary" id="map-scan">Build the map</button>
+              </div>
+            </div>
+
+            <div class="map-foot">
+              <div class="map-selected" id="map-selected">
+                Click a tile to select it · double-click a folder to zoom in
+              </div>
+              <div class="map-actions">
+                <button class="btn btn-ghost btn-small" id="map-rebuild">Rebuild</button>
+                <button class="btn btn-ghost btn-small" id="map-up" disabled>Up one level</button>
+                <button class="btn btn-ghost btn-small" id="map-reveal" disabled>Show in Explorer</button>
+                <button class="btn btn-small" id="map-trash" disabled>Move to Recycle Bin</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- Backups -->
+        <section class="view" id="view-backups">
+          <header class="view-head">
+            <div>
+              <h1>Backups</h1>
+              <p class="subtitle" id="backups-subtitle">Restore points written before anything was removed from the registry.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="backups-folder">Open folder</button>
+              <button class="btn btn-ghost" id="backups-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div class="list" id="backups-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast-stack" id="toasts"></div>
+
+    <div class="modal-backdrop" id="modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 id="modal-title"></h2>
+        <p id="modal-body"></p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+          <button class="btn btn-danger" id="modal-confirm">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="treemap.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
