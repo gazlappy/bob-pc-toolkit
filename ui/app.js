@@ -21,6 +21,7 @@ const state = {
   monitor: { active: false, built: false, timer: null, cpuHistory: [], memHistory: [] },
   autoruns: { data: null, ext: null, loaded: false, search: '', flaggedOnly: false, openGroups: new Set(['logon', 'ifeo', 'wmi']) },
   security: { data: null, loaded: false },
+  battery: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -123,6 +124,7 @@ function show(view) {
   if (view === 'events' && !state.events.loaded) loadEvents();
   if (view === 'autoruns' && !state.autoruns.loaded) loadAutoruns();
   if (view === 'security' && !state.security.loaded) loadSecurity();
+  if (view === 'battery' && !state.battery.loaded) loadBattery();
   if (view === 'backups') loadBackups();
 }
 
@@ -2141,6 +2143,133 @@ async function loadSecurity() {
 }
 
 $('security-refresh').addEventListener('click', loadSecurity);
+
+/* Battery health ----------------------------------------------------------- */
+
+function formatRuntime(min) {
+  if (min == null) return null;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function statRow(label, value) {
+  const row = document.createElement('div');
+  row.className = 'sec-check';
+  const main = document.createElement('div');
+  main.className = 'sec-main';
+  const l = document.createElement('div');
+  l.className = 'sec-label';
+  l.textContent = label;
+  main.append(l);
+  const v = document.createElement('div');
+  v.className = 'sec-value';
+  v.textContent = value;
+  row.append(main, v);
+  return row;
+}
+
+function renderBattery() {
+  const body = $('battery-body');
+  const b = state.battery.data;
+  if (!b) {
+    body.replaceChildren(empty('Reading the battery…'));
+    return;
+  }
+  if (!b.present) {
+    body.replaceChildren(empty('No battery detected — this looks like a desktop.'));
+    $('battery-subtitle').textContent = 'No battery on this machine.';
+    return;
+  }
+
+  body.replaceChildren();
+
+  // Hero: charge + state + runtime, with a charge meter.
+  const hero = document.createElement('div');
+  hero.className = 'bat-hero';
+  const left = document.createElement('div');
+  left.className = 'bat-hero-left';
+  const pct = document.createElement('div');
+  pct.className = 'bat-pct';
+  pct.textContent = `${b.chargePct}%`;
+  const st = document.createElement('div');
+  st.className = 'bat-state';
+  const runtime = formatRuntime(b.runtimeMin);
+  st.textContent = b.state + (runtime && !b.charging ? ` · ~${runtime} left` : '');
+  left.append(pct, st);
+
+  const meter = document.createElement('div');
+  meter.className = 'bat-meter';
+  const fill = document.createElement('div');
+  fill.className = `bat-meter-fill${b.chargePct <= 15 && !b.acOnline ? ' is-low' : ''}`;
+  fill.style.width = `${Math.max(3, b.chargePct)}%`;
+  meter.append(fill);
+  hero.append(left, meter);
+  body.append(hero);
+
+  // Health / wear card.
+  const wearKnown = b.wearPct != null;
+  const card = document.createElement('div');
+  card.className = `sec-summary is-${wearKnown ? b.health : 'info'}`;
+  const lead = document.createElement('div');
+  lead.className = 'sec-summary-lead';
+  lead.textContent = wearKnown
+    ? `Battery health: ${b.health === 'good' ? 'Good' : b.health === 'warn' ? 'Fair' : 'Poor'}`
+    : 'Battery wear: not reported';
+  const sub = document.createElement('div');
+  sub.className = 'sec-summary-sub';
+  sub.textContent = wearKnown
+    ? `Holds ${100 - b.wearPct}% of its original capacity — ${b.wearPct}% worn.`
+    : 'This battery does not report its design capacity.';
+  card.append(lead, sub);
+  if (wearKnown) {
+    const bar = document.createElement('div');
+    bar.className = 'bat-wear';
+    const wfill = document.createElement('div');
+    wfill.className = `bat-wear-fill is-${b.health}`;
+    wfill.style.width = `${Math.max(2, b.wearPct)}%`;
+    bar.append(wfill);
+    card.append(bar);
+  }
+  body.append(card);
+
+  // Detail stats.
+  const title = document.createElement('div');
+  title.className = 'group-title';
+  title.textContent = 'Details';
+  body.append(title);
+  const list = document.createElement('div');
+  list.className = 'sec-list';
+  const wh = (mwh) => `${(mwh / 1000).toFixed(1)} Wh`;
+  if (b.designCapacity) list.append(statRow('Design capacity', wh(b.designCapacity)));
+  if (b.fullCapacity) list.append(statRow('Full charge now', wh(b.fullCapacity)));
+  list.append(statRow('Cycle count', b.cycleCount ? String(b.cycleCount) : 'Not reported'));
+  if (b.chemistry) list.append(statRow('Chemistry', b.chemistry));
+  if (b.voltageMv) list.append(statRow('Voltage', `${(b.voltageMv / 1000).toFixed(2)} V`));
+  if (b.manufacturer) list.append(statRow('Manufacturer', b.manufacturer));
+  if (b.name) list.append(statRow('Name', b.name));
+  body.append(list);
+
+  $('battery-subtitle').textContent = wearKnown
+    ? `${b.chargePct}% now · ${b.wearPct}% worn${b.cycleCount ? ` · ${b.cycleCount} cycles` : ''}`
+    : `${b.chargePct}% now`;
+}
+
+async function loadBattery() {
+  state.battery.loaded = false;
+  renderBattery();
+  try {
+    state.battery.data = await window.pc.battery();
+    state.battery.loaded = true;
+    renderBattery();
+  } catch (error) {
+    state.battery.loaded = true;
+    $('battery-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('battery-refresh').addEventListener('click', loadBattery);
 
 /* Event log ---------------------------------------------------------------- */
 

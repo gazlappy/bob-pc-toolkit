@@ -121,6 +121,13 @@ normalised by core count. The first sample is slow — the WMI perf provider war
 up for a few seconds — so the tab shows a starting placeholder until the counters
 populate.
 
+**Battery** — for laptops: how much of the battery's original design capacity is
+left (wear %, with the health graded Good/Fair/Poor), the cycle count, chemistry
+and manufacturer, and the live charge with a runtime estimate. Read-only. The
+figures come from the firmware's own WMI classes, and where those come back blank
+(some firmwares do) it falls back to `powercfg /batteryreport` for the same
+values. On a desktop there is no battery and the tab says so plainly.
+
 **Autoruns** — the persistence auditor: the deep autostart surfaces that the
 Startup tab does not touch and Task Manager hides entirely, which is where
 malware hides to survive a reboot. Winlogon hooks, `AppInit_DLLs`, legacy
@@ -263,6 +270,7 @@ src/repair.js   SFC / DISM / chkdsk launcher with streamed output
 src/events.js   event-log reader: stability timeline + deduped error feed
 src/devices.js  device + driver inventory, problem devices flagged
 src/monitor.js  live CPU/RAM/disk/net snapshot + top processes
+src/battery.js  battery wear %, cycle count, live charge (WMI + powercfg)
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 ui/             index.html, style.css, app.js, treemap.js

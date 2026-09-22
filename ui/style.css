@@ -2035,3 +2035,76 @@ select:focus {
 .sec-value.is-bad {
   color: var(--danger);
 }
+
+/* Battery health ----------------------------------------------------------- */
+
+.bat-hero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.bat-hero-left {
+  flex: 0 0 auto;
+}
+
+.bat-pct {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.bat-state {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.bat-meter {
+  flex: 1;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.bat-meter-fill {
+  height: 100%;
+  background: var(--good);
+  transition: width 0.3s ease;
+}
+
+.bat-meter-fill.is-low {
+  background: var(--danger);
+}
+
+.bat-wear {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.bat-wear-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.bat-wear-fill.is-good {
+  background: var(--good);
+}
+
+.bat-wear-fill.is-warn {
+  background: var(--warn);
+}
+
+.bat-wear-fill.is-bad {
+  background: var(--danger);
+}

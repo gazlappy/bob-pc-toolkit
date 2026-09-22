@@ -23,6 +23,7 @@ const devices = require('./src/devices');
 const monitor = require('./src/monitor');
 const autoruns = require('./src/autoruns');
 const security = require('./src/security');
+const battery = require('./src/battery');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -108,6 +109,7 @@ handle('autoruns:extensions', () => autoruns.extensions());
 handle('autoruns:setEnabled', (id, enabled) => autoruns.setEnabled(id, enabled));
 handle('autoruns:reveal', (id) => autoruns.reveal(id));
 handle('security:read', () => security.read());
+handle('battery:read', () => battery.read());
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

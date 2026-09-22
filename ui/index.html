@@ -56,6 +56,9 @@
           <button class="nav-item" data-view="monitor">
             <span class="nav-dot"></span>Performance
           </button>
+          <button class="nav-item" data-view="battery">
+            <span class="nav-dot"></span>Battery
+          </button>
           <button class="nav-item" data-view="keys">
             <span class="nav-dot"></span>Product keys
           </button>
@@ -418,6 +421,22 @@
           <div id="autoruns-summary"></div>
           <div id="autoruns-body">
             <div class="empty">Auditing autostart locations…</div>
+          </div>
+        </section>
+
+        <!-- Battery health -->
+        <section class="view" id="view-battery">
+          <header class="view-head">
+            <div>
+              <h1>Battery</h1>
+              <p class="subtitle" id="battery-subtitle">Wear, cycle count and what it's doing right now.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="battery-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="battery-body">
+            <div class="empty">Reading the battery…</div>
           </div>
         </section>
 
