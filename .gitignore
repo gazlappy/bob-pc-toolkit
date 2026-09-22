@@ -1,2 +1,5 @@
 node_modules/
 dist/
+
+# Local editor and preview tooling.
+.claude/launch.json
