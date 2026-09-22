@@ -15,6 +15,8 @@ async function call(channel, ...args) {
 contextBridge.exposeInMainWorld('pc', {
   overview: () => call('sys:overview'),
   elevate: () => call('sys:elevate'),
+  system: () => call('system:info'),
+  copyText: (text) => call('sys:copy', text),
 
   startup: {
     list: () => call('startup:list'),

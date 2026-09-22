@@ -82,6 +82,15 @@ only the big files. The line under the breadcrumb always says which filter is in
 force and how many files matched, and changing a filter or a folder marks the
 map stale rather than leaving a picture that no longer matches the controls.
 
+**System info** — a read-only spec sheet: Windows edition, build and activation
+status; make, model, motherboard and BIOS; CPU; RAM with per-module capacity,
+speed and part number; graphics; and per-drive **health** (Healthy / Warning /
+Unhealthy) with type, bus, and — where the drive reports them — temperature,
+power-on hours and SSD life remaining. *Copy report* puts the lot on the
+clipboard as plain text for a job sheet. Nothing but CIM/WMI queries, so it
+changes nothing and needs no admin (though a few drive counters only appear
+elevated).
+
 **Backups** — every restore point the app has written, with a one-click restore.
 
 ## How it stays safe
@@ -149,7 +158,8 @@ src/registry.js registry scan and clean
 src/backup.js   .reg restore points: write, list, restore, discard
 src/treemap.js  size tree for the map, pruned per-node for the renderer
 src/duplicates.js  three-pass duplicate detection
-src/programs.js installed programs: list, measure on disk, launch uninstaller
+src/programs.js installed programs: list, measure, uninstall, force-remove
+src/system.js   read-only hardware/OS spec sheet with drive SMART health
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

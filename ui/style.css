@@ -126,6 +126,161 @@ nav {
   font-variant-numeric: tabular-nums;
 }
 
+.nav-group-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 14px 12px 4px;
+}
+
+/* System info -------------------------------------------------------------- */
+
+.spec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.spec-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 14px 16px;
+}
+
+.spec-card.wide {
+  grid-column: 1 / -1;
+}
+
+.spec-card h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.spec-row .k {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.spec-row .v {
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.spec-hero {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.spec-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  user-select: text;
+}
+
+/* Drive health cards */
+.drive {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.drive-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.drive-name {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.health-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.health-pill.ok {
+  background: rgba(63, 185, 80, 0.14);
+  color: var(--good);
+}
+
+.health-pill.warn {
+  background: rgba(210, 153, 34, 0.16);
+  color: var(--warn);
+}
+
+.health-pill.bad {
+  background: rgba(240, 86, 63, 0.16);
+  color: var(--danger);
+}
+
+.drive-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: #0b0e13;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.drive-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.drive-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.drive-stats b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .spec-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sidebar-foot {
   margin-top: auto;
 }

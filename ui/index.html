@@ -17,21 +17,11 @@
           <button class="nav-item is-active" data-view="overview">
             <span class="nav-dot"></span>Overview
           </button>
-          <button class="nav-item" data-view="startup">
-            <span class="nav-dot"></span>Startup
-            <span class="nav-count" id="nav-startup-count"></span>
-          </button>
-          <button class="nav-item" data-view="programs">
-            <span class="nav-dot"></span>Programs
-            <span class="nav-count" id="nav-programs-count"></span>
-          </button>
+
+          <div class="nav-group-label">Clean up</div>
           <button class="nav-item" data-view="cleanup">
             <span class="nav-dot"></span>Cleanup
             <span class="nav-count" id="nav-cleanup-count"></span>
-          </button>
-          <button class="nav-item" data-view="registry">
-            <span class="nav-dot"></span>Registry
-            <span class="nav-count" id="nav-registry-count"></span>
           </button>
           <button class="nav-item" data-view="files">
             <span class="nav-dot"></span>Large files
@@ -40,6 +30,27 @@
             <span class="nav-dot"></span>Duplicates
             <span class="nav-count" id="nav-dupes-count"></span>
           </button>
+          <button class="nav-item" data-view="registry">
+            <span class="nav-dot"></span>Registry
+            <span class="nav-count" id="nav-registry-count"></span>
+          </button>
+
+          <div class="nav-group-label">Programs</div>
+          <button class="nav-item" data-view="programs">
+            <span class="nav-dot"></span>Programs
+            <span class="nav-count" id="nav-programs-count"></span>
+          </button>
+          <button class="nav-item" data-view="startup">
+            <span class="nav-dot"></span>Startup
+            <span class="nav-count" id="nav-startup-count"></span>
+          </button>
+
+          <div class="nav-group-label">Diagnose &amp; repair</div>
+          <button class="nav-item" data-view="system">
+            <span class="nav-dot"></span>System info
+          </button>
+
+          <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
             <span class="nav-dot"></span>Backups
             <span class="nav-count" id="nav-backups-count"></span>
@@ -275,6 +286,23 @@
             </div>
           </div>
         </section>
+        <!-- System info -->
+        <section class="view" id="view-system">
+          <header class="view-head">
+            <div>
+              <h1>System info</h1>
+              <p class="subtitle" id="system-subtitle">A read-only snapshot of this machine.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="system-copy" disabled>Copy report</button>
+              <button class="btn btn-ghost" id="system-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="system-body">
+            <div class="empty">Reading this machine…</div>
+          </div>
+        </section>
+
         <!-- Backups -->
         <section class="view" id="view-backups">
           <header class="view-head">

@@ -12,6 +12,7 @@ const state = {
   backups: { items: [] },
   programs: { items: [], search: '', sort: 'size', loaded: false },
   dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
+  system: { info: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -104,6 +105,7 @@ function show(view) {
   if (view === 'startup' && !state.startup.entries.length) loadStartup();
   if (view === 'files' && !state.files.roots.length) loadRoots();
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
+  if (view === 'system' && !state.system.loaded) loadSystem();
   if (view === 'backups') loadBackups();
 }
 
@@ -1172,6 +1174,263 @@ $('map-trash').addEventListener('click', async () => {
     } else {
       toast((result.failed[0] && result.failed[0].error) || 'Could not move that file.', 'error');
     }
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+/* System info -------------------------------------------------------------- */
+
+function formatUptime(ms) {
+  if (!ms || ms < 0) return null;
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  const mins = Math.floor((ms % 3600000) / 60000);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function formatDay(iso) {
+  if (!iso) return null;
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function specCard({ title, hero, sub, rows, wide }) {
+  const card = document.createElement('div');
+  card.className = `spec-card${wide ? ' wide' : ''}`;
+  if (title) {
+    const h = document.createElement('h3');
+    h.textContent = title;
+    card.append(h);
+  }
+  if (hero) {
+    const el = document.createElement('div');
+    el.className = 'spec-hero';
+    el.textContent = hero;
+    card.append(el);
+  }
+  if (sub) {
+    const el = document.createElement('div');
+    el.className = 'spec-sub';
+    el.textContent = sub;
+    card.append(el);
+  }
+  for (const [k, v] of rows || []) {
+    if (v == null || v === '') continue;
+    const row = document.createElement('div');
+    row.className = 'spec-row';
+    const kEl = document.createElement('span');
+    kEl.className = 'k';
+    kEl.textContent = k;
+    const vEl = document.createElement('span');
+    vEl.className = 'v';
+    vEl.textContent = v;
+    row.append(kEl, vEl);
+    card.append(row);
+  }
+  return card;
+}
+
+function healthClass(health) {
+  const h = String(health || '').toLowerCase();
+  if (h === 'healthy') return 'ok';
+  if (h === 'warning') return 'warn';
+  return 'bad';
+}
+
+function driveCard(disk) {
+  const card = document.createElement('div');
+  card.className = 'drive';
+
+  const top = document.createElement('div');
+  top.className = 'drive-top';
+  const name = document.createElement('div');
+  name.className = 'drive-name';
+  name.textContent = disk.name;
+  const pill = document.createElement('span');
+  pill.className = `health-pill ${healthClass(disk.health)}`;
+  pill.textContent = disk.health || 'Unknown';
+  top.append(name, pill);
+  card.append(top);
+
+  // For an SSD that reports wear, show life remaining as a meter.
+  if (disk.wear != null) {
+    const meter = document.createElement('div');
+    meter.className = 'drive-meter';
+    const fill = document.createElement('div');
+    fill.className = 'drive-meter-fill';
+    const remaining = Math.max(0, 100 - disk.wear);
+    fill.style.width = `${remaining}%`;
+    if (remaining < 20) fill.style.background = 'var(--danger)';
+    else if (remaining < 50) fill.style.background = 'var(--warn)';
+    meter.append(fill);
+    card.append(meter);
+  }
+
+  const stats = document.createElement('div');
+  stats.className = 'drive-stats';
+  const parts = [
+    ['Capacity', formatBytes(disk.size)],
+    ['Type', [disk.media, disk.bus].filter(Boolean).join(' · ') || null],
+    ['Spin', disk.spindleSpeed ? `${disk.spindleSpeed.toLocaleString('en-GB')} rpm` : disk.media === 'SSD' ? 'Solid state' : null],
+    ['Temp', disk.temperature != null ? `${disk.temperature}°C` : null],
+    ['Powered on', disk.powerOnHours != null ? `${disk.powerOnHours.toLocaleString('en-GB')} h (${(disk.powerOnHours / 8760).toFixed(1)} yr)` : null],
+    ['Life left', disk.wear != null ? `${Math.max(0, 100 - disk.wear)}%` : null],
+    ['Errors', disk.readErrors != null ? `${disk.readErrors} read / ${disk.writeErrors} write` : null],
+    ['Serial', disk.serial || null],
+  ];
+  for (const [k, v] of parts) {
+    if (v == null) continue;
+    const span = document.createElement('span');
+    span.append(`${k} `);
+    const b = document.createElement('b');
+    b.textContent = v;
+    span.append(b);
+    stats.append(span);
+  }
+  card.append(stats);
+  return card;
+}
+
+function renderSystem() {
+  const body = $('system-body');
+  const info = state.system.info;
+  if (!info) {
+    body.replaceChildren(empty('Reading this machine…'));
+    return;
+  }
+
+  body.replaceChildren();
+  const grid = document.createElement('div');
+  grid.className = 'spec-grid';
+
+  grid.append(
+    specCard({
+      title: 'Windows',
+      hero: info.os.caption,
+      sub: `Build ${info.os.build} · ${info.os.architecture}`,
+      rows: [
+        ['Activation', info.activation ? info.activation.status : null],
+        ['Installed', formatDay(info.os.installedOn)],
+        ['Up for', formatUptime(info.uptimeMs)],
+        ['Computer name', info.os.computerName || info.hostname],
+      ],
+    })
+  );
+
+  grid.append(
+    specCard({
+      title: 'Machine',
+      hero: [info.machine.manufacturer, info.machine.model].filter(Boolean).join(' ') || 'PC',
+      sub: info.machine.systemType,
+      rows: [
+        ['Motherboard', info.machine.board],
+        ['BIOS', info.machine.biosVersion ? `${info.machine.biosVersion}${info.machine.biosDate ? ` (${formatDay(info.machine.biosDate)})` : ''}` : null],
+        ['Battery', info.battery ? `${info.battery.percent}%` : null],
+      ],
+    })
+  );
+
+  grid.append(
+    specCard({
+      title: 'Processor',
+      hero: info.cpu.name,
+      rows: [
+        ['Cores / threads', `${info.cpu.cores} / ${info.cpu.threads}`],
+        ['Base clock', info.cpu.maxClockMhz ? `${(info.cpu.maxClockMhz / 1000).toFixed(2)} GHz` : null],
+        ['Sockets', info.cpu.sockets > 1 ? String(info.cpu.sockets) : null],
+      ],
+    })
+  );
+
+  const memRows = [['Slots', `${info.memory.slotsUsed} of ${info.memory.slotsTotal || '?'} filled`]];
+  for (const m of info.memory.modules) {
+    memRows.push([m.slot, `${formatBytes(m.capacity)} · ${m.speed} MHz${m.manufacturer ? ` · ${m.manufacturer}` : ''}`]);
+  }
+  grid.append(specCard({ title: 'Memory', hero: `${formatBytes(info.memory.total)} RAM`, rows: memRows }));
+
+  for (const gpu of info.gpus.filter((g) => g.vram || /nvidia|amd|radeon|intel|geforce|arc/i.test(g.name))) {
+    grid.append(
+      specCard({
+        title: 'Graphics',
+        hero: gpu.name,
+        rows: [
+          ['Memory', gpu.vram ? formatBytes(gpu.vram) : null],
+          ['Resolution', gpu.resolution],
+          ['Driver', gpu.driverVersion ? `${gpu.driverVersion}${gpu.driverDate ? ` (${formatDay(gpu.driverDate)})` : ''}` : null],
+        ],
+      })
+    );
+  }
+
+  body.append(grid);
+
+  const drivesLabel = document.createElement('div');
+  drivesLabel.className = 'group-title';
+  drivesLabel.textContent = `Drive health · ${info.disks.length}`;
+  body.append(drivesLabel);
+  for (const disk of info.disks) body.append(driveCard(disk));
+
+  const anyReliability = info.disks.some((d) => d.temperature != null || d.powerOnHours != null || d.wear != null);
+  if (!anyReliability && !state.admin) {
+    const note = document.createElement('p');
+    note.className = 'subtitle';
+    note.style.marginTop = '10px';
+    note.textContent =
+      'Temperature, power-on hours and SSD wear are reported by some drives only, and often need administrator rights. Restart as administrator to see more.';
+    body.append(note);
+  }
+
+  $('system-subtitle').textContent = `${info.machine.manufacturer || ''} ${info.machine.model || ''}`.trim() || 'This machine';
+}
+
+function buildSystemReport() {
+  const info = state.system.info;
+  if (!info) return '';
+  const lines = ['PC Cleanup — system report', new Date().toLocaleString('en-GB'), ''];
+  lines.push(`OS         ${info.os.caption} (build ${info.os.build}, ${info.os.architecture})`);
+  if (info.activation) lines.push(`Activation ${info.activation.status}`);
+  lines.push(`Machine    ${[info.machine.manufacturer, info.machine.model].filter(Boolean).join(' ')}`);
+  lines.push(`Board      ${info.machine.board} · BIOS ${info.machine.biosVersion}`);
+  lines.push(`CPU        ${info.cpu.name} (${info.cpu.cores}c/${info.cpu.threads}t)`);
+  lines.push(`RAM        ${formatBytes(info.memory.total)} (${info.memory.slotsUsed}/${info.memory.slotsTotal} slots)`);
+  for (const m of info.memory.modules) lines.push(`             ${m.slot}: ${formatBytes(m.capacity)} ${m.speed}MHz ${m.manufacturer} ${m.partNumber}`.trimEnd());
+  for (const g of info.gpus.filter((x) => x.vram)) lines.push(`GPU        ${g.name}${g.vram ? ` (${formatBytes(g.vram)})` : ''} driver ${g.driverVersion}`);
+  lines.push('Drives:');
+  for (const d of info.disks) {
+    let line = `             ${d.name} — ${formatBytes(d.size)} ${d.media || ''}/${d.bus || ''} — ${d.health}`;
+    if (d.temperature != null) line += ` ${d.temperature}°C`;
+    if (d.powerOnHours != null) line += ` ${d.powerOnHours}h`;
+    if (d.wear != null) line += ` ${100 - d.wear}% life`;
+    lines.push(line.replace(/\s+/g, ' ').replace('             ', '             '));
+  }
+  return lines.join('\n');
+}
+
+async function loadSystem() {
+  state.system.loaded = false;
+  $('system-body').replaceChildren(empty('Reading this machine…'));
+  $('system-copy').disabled = true;
+  try {
+    state.system.info = await window.pc.system();
+    state.system.loaded = true;
+    renderSystem();
+    $('system-copy').disabled = false;
+  } catch (error) {
+    state.system.loaded = true;
+    $('system-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('system-refresh').addEventListener('click', loadSystem);
+$('system-copy').addEventListener('click', async () => {
+  try {
+    await window.pc.copyText(buildSystemReport());
+    toast('System report copied to the clipboard.', 'good');
   } catch (error) {
     toast(error.message, 'error');
   }

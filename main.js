@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
 
 const ps = require('./src/ps');
 const sys = require('./src/sys');
@@ -13,6 +13,7 @@ const backup = require('./src/backup');
 const treemap = require('./src/treemap');
 const duplicates = require('./src/duplicates');
 const programs = require('./src/programs');
+const system = require('./src/system');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -72,6 +73,11 @@ function progress(channel) {
 
 handle('sys:overview', () => sys.overview());
 handle('sys:elevate', () => sys.elevate());
+handle('system:info', () => system.info());
+handle('sys:copy', (text) => {
+  clipboard.writeText(String(text ?? ''));
+  return true;
+});
 
 handle('startup:list', () => startup.list());
 handle('startup:tasks', () => startup.tasks());
