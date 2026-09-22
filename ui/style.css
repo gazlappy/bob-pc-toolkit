@@ -281,6 +281,34 @@ nav {
   }
 }
 
+/* Repair */
+.repair-cmd {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.repair-cmd:first-child {
+  border-top: 0;
+}
+
+.repair-cmd .cmd-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.repair-cmd .cmd-name {
+  font-weight: 600;
+}
+
+.repair-cmd .cmd-blurb {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
 /* Network */
 .net-actions {
   display: flex;

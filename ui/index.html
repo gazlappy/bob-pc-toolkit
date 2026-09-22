@@ -55,6 +55,9 @@
           <button class="nav-item" data-view="network">
             <span class="nav-dot"></span>Network
           </button>
+          <button class="nav-item" data-view="repair">
+            <span class="nav-dot"></span>Repair
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -307,6 +310,26 @@
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
           </div>
+        </section>
+
+        <!-- Repair -->
+        <section class="view" id="view-repair">
+          <header class="view-head">
+            <div>
+              <h1>Windows repair</h1>
+              <p class="subtitle" id="repair-subtitle">Run the built-in repair tools with their output here, not in a console that vanishes.</p>
+            </div>
+            <button class="btn btn-danger" id="repair-stop" hidden>Stop</button>
+          </header>
+
+          <div class="admin-card" id="repair-admin-note" hidden>
+            <div class="admin-state">These tools change protected system files, so they need administrator rights.</div>
+            <button class="btn btn-ghost btn-small" id="repair-elevate">Restart as administrator</button>
+          </div>
+
+          <div id="repair-commands"></div>
+
+          <pre class="net-console" id="repair-console" hidden></pre>
         </section>
 
         <!-- Network -->

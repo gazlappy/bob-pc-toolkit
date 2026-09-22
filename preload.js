@@ -32,6 +32,17 @@ contextBridge.exposeInMainWorld('pc', {
     },
   },
 
+  repair: {
+    list: () => call('repair:list'),
+    start: (id) => call('repair:start', id),
+    stop: (id) => call('repair:stop', id),
+    onLine: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('repair:line', listener);
+      return () => ipcRenderer.removeListener('repair:line', listener);
+    },
+  },
+
   startup: {
     list: () => call('startup:list'),
     tasks: () => call('startup:tasks'),

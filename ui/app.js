@@ -15,6 +15,7 @@ const state = {
   system: { info: null, loaded: false },
   keys: { data: null, loaded: false },
   network: { info: null, actions: [], loaded: false, runId: null },
+  repair: { commands: [], loaded: false, runId: null, runLabel: null },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -110,6 +111,7 @@ function show(view) {
   if (view === 'system' && !state.system.loaded) loadSystem();
   if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'network' && !state.network.loaded) loadNetwork();
+  if (view === 'repair' && !state.repair.loaded) loadRepair();
   if (view === 'backups') loadBackups();
 }
 
@@ -1439,6 +1441,130 @@ $('system-copy').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Repair ------------------------------------------------------------------- */
+
+let repairLines = [];
+let repairLastWasProgress = false;
+
+function repairPrint(line, isProgress) {
+  const el = $('repair-console');
+  el.hidden = false;
+  // Collapse consecutive progress lines onto one, so a percentage counts up in
+  // place instead of scrolling a hundred near-identical lines past.
+  if (isProgress && repairLastWasProgress && repairLines.length) {
+    repairLines[repairLines.length - 1] = line;
+  } else {
+    repairLines.push(line);
+    if (repairLines.length > 800) repairLines = repairLines.slice(-800);
+  }
+  repairLastWasProgress = isProgress;
+  el.textContent = repairLines.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+function repairStopUi() {
+  $('repair-stop').hidden = true;
+  for (const btn of $('repair-commands').querySelectorAll('.btn')) {
+    btn.disabled = btn.dataset.needsAdmin === 'true' && !state.admin;
+  }
+}
+
+function renderRepair() {
+  const wrap = $('repair-commands');
+  wrap.replaceChildren();
+
+  const card = document.createElement('div');
+  card.className = 'list';
+  for (const cmd of state.repair.commands) {
+    const row = document.createElement('div');
+    row.className = 'repair-cmd';
+
+    const body = document.createElement('div');
+    body.className = 'cmd-body';
+    const name = document.createElement('div');
+    name.className = 'cmd-name';
+    name.textContent = cmd.label;
+    const blurb = document.createElement('div');
+    blurb.className = 'cmd-blurb';
+    blurb.textContent = cmd.blurb;
+    body.append(name, blurb);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-small';
+    btn.textContent = 'Run';
+    btn.dataset.needsAdmin = String(cmd.needsAdmin);
+    btn.disabled = cmd.needsAdmin && !state.admin;
+    if (btn.disabled) btn.title = 'Restart as administrator to run this.';
+    btn.addEventListener('click', () => startRepair(cmd));
+
+    row.append(body, btn);
+    card.append(row);
+  }
+  wrap.append(card);
+
+  $('repair-admin-note').hidden = state.admin;
+}
+
+async function startRepair(cmd) {
+  if (state.repair.runId != null) {
+    toast('A repair is already running — stop it first.', 'error');
+    return;
+  }
+  repairLines = [];
+  repairLastWasProgress = false;
+  repairPrint(`> ${cmd.label}`, false);
+  for (const btn of $('repair-commands').querySelectorAll('.btn')) btn.disabled = true;
+  $('repair-stop').hidden = false;
+
+  try {
+    state.repair.runId = await window.pc.repair.start(cmd.id);
+    state.repair.runLabel = cmd.label;
+  } catch (error) {
+    repairPrint(error.message, false);
+    repairStopUi();
+  }
+}
+
+window.pc.repair.onLine((event) => {
+  if (state.repair.runId == null || event.id !== state.repair.runId) return;
+  if (event.done) {
+    const label = state.repair.runLabel || 'Repair';
+    repairPrint(
+      event.code === 0 ? `> ${label} finished.` : `> ${label} exited (code ${event.code}).`,
+      false
+    );
+    state.repair.runId = null;
+    repairStopUi();
+    return;
+  }
+  if (event.line) repairPrint(event.line, Boolean(event.progress));
+});
+
+$('repair-stop').addEventListener('click', async () => {
+  if (state.repair.runId != null) await window.pc.repair.stop(state.repair.runId).catch(() => {});
+  state.repair.runId = null;
+  repairStopUi();
+  repairPrint('> stopped', false);
+});
+$('repair-elevate').addEventListener('click', async () => {
+  try {
+    await window.pc.elevate();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+async function loadRepair() {
+  try {
+    state.repair.commands = await window.pc.repair.list();
+    state.repair.loaded = true;
+    renderRepair();
+  } catch (error) {
+    state.repair.loaded = true;
+    $('repair-commands').replaceChildren(empty(error.message));
+  }
+}
 
 /* Network ------------------------------------------------------------------ */
 

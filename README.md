@@ -1,8 +1,14 @@
 # PC Cleanup
 
-A small Windows housekeeping app: manage what runs at startup, and reclaim disk
-space from caches and clutter. Electron front end, PowerShell doing the
-privileged work underneath.
+A Windows bench tool for keeping a PC in order: reclaim disk space, manage
+startup and installed programs, and diagnose or repair the machine — a spec
+sheet with drive health, product-key recovery, a network toolkit, and the
+built-in repair commands, all in one place. Electron front end, PowerShell
+doing the privileged work underneath.
+
+It is built to be trustworthy with a machine you care about: it reads before it
+writes, shows sizes and plans before removing anything, quarantines rather than
+deletes, and writes a restore point before any registry change.
 
 ## Running it
 
@@ -90,6 +96,14 @@ power-on hours and SSD life remaining. *Copy report* puts the lot on the
 clipboard as plain text for a job sheet. Nothing but CIM/WMI queries, so it
 changes nothing and needs no admin (though a few drive counters only appear
 elevated).
+
+**Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
+CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
+their output streaming into the app rather than a console that closes on exit.
+Each is explained with what it does and when to reach for it. They change
+protected system files, so they need administrator rights, which the tab gates
+on. SFC writes UTF-16 with carriage-return progress; the reader decodes it and
+collapses a counting percentage onto one line instead of a hundred.
 
 **Network** — every active adapter at a glance (IP, gateway, DNS, subnet, MAC,
 link speed, DHCP or static), the everyday quick fixes (flush DNS, release &
@@ -179,6 +193,7 @@ src/programs.js installed programs: list, measure, uninstall, force-remove
 src/system.js   read-only hardware/OS spec sheet with drive SMART health
 src/keys.js     own-machine Windows/Office product-key recovery
 src/network.js  adapter info, DNS/IP fixes, live ping & traceroute
+src/repair.js   SFC / DISM / chkdsk launcher with streamed output
 ui/             index.html, style.css, app.js, treemap.js
 ```
 
