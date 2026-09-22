@@ -1766,9 +1766,14 @@ async function runSpeedTest() {
     $('speed-ping').textContent = result.latencyMs != null ? Math.round(result.latencyMs) : '—';
     $('speed-down').classList.remove('live');
     $('speed-up').classList.remove('live');
-    $('speed-status').textContent = result.busy
-      ? 'The public speed-test server is busy (too many requests). Try again in a minute.'
-      : `Done · jitter ${result.jitterMs != null ? result.jitterMs.toFixed(1) : '?'} ms · via Cloudflare`;
+    if (result.downMbps == null && result.upMbps == null) {
+      $('speed-status').textContent = 'The public test servers are busy right now. Try again in a minute.';
+    } else {
+      const bits = [`jitter ${result.jitterMs != null ? result.jitterMs.toFixed(1) : '?'} ms`];
+      if (result.source) bits.push(`via ${result.source}`);
+      if (result.downMbps == null) bits.unshift('download unavailable');
+      $('speed-status').textContent = `Done · ${bits.join(' · ')}`;
+    }
 
     const lan = result.lan || {};
     const lanEl = $('speed-lan');

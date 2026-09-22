@@ -21,6 +21,17 @@ const network = require('./network');
 const DOWN_URL = (bytes) => `https://speed.cloudflare.com/__down?bytes=${bytes}`;
 const UP_URL = 'https://speed.cloudflare.com/__up';
 
+// Download sources tried in order. Cloudflare is closest and fastest when it
+// answers, but rate-limits its data endpoint hard per IP after a few tests, so
+// there are static-file fallbacks that do not. A cache-buster is appended so a
+// proxy never serves a repeat from cache. Whichever first delivers bytes is
+// kept for the rest of the run.
+const DOWNLOAD_SOURCES = [
+  { name: 'Cloudflare', url: () => DOWN_URL(90_000_000) },
+  { name: 'OVH', url: () => `https://proof.ovh.net/files/100Mb.dat?n=${Date.now()}` },
+  { name: 'Hetzner', url: () => `https://speed.hetzner.de/100MB.bin?n=${Date.now()}` },
+];
+
 const DOWNLOAD_MS = 8000;
 const UPLOAD_MS = 7000;
 const LATENCY_SAMPLES = 12;
@@ -57,38 +68,51 @@ async function measureLatency(emit) {
   return { latencyMs: s.avg, jitterMs: s.jitter, samples: rtts.length };
 }
 
-// Cloudflare's __down caps the size (it 403s around 100 MB), so a fixed safe
-// chunk is fetched repeatedly until the time budget is spent, exactly as the
-// upload does. The abort fires mid-chunk when time is up.
-const DOWNLOAD_CHUNK = 50_000_000;
-
 async function measureDownload(emit) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DOWNLOAD_MS);
   let received = 0;
   let lastEmit = 0;
   let lastStatus = 0;
+  let working = null;
   const start = performance.now();
 
+  const tick = () => {
+    const now = performance.now();
+    // Reads arrive thousands of times a second; forward ~10/s so the renderer
+    // is not flooded.
+    if (now - lastEmit >= 100) {
+      lastEmit = now;
+      const secs = (now - start) / 1000;
+      emit({ phase: 'download', mbps: mbps(received, secs), pct: Math.min(1, (secs * 1000) / DOWNLOAD_MS) });
+    }
+  };
+
   try {
-    while (performance.now() - start < DOWNLOAD_MS) {
-      const res = await fetch(DOWN_URL(DOWNLOAD_CHUNK), { cache: 'no-store', signal: controller.signal });
-      lastStatus = res.status;
-      if (!res.ok || !res.body) break;
-      const reader = res.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        received += value.length;
-        const now = performance.now();
-        // Reads arrive thousands of times a second; only forward ~10/s so the
-        // renderer is not flooded.
-        if (now - lastEmit >= 100) {
-          lastEmit = now;
-          const secs = (now - start) / 1000;
-          emit({ phase: 'download', mbps: mbps(received, secs), pct: Math.min(1, (secs * 1000) / DOWNLOAD_MS) });
+    for (const source of DOWNLOAD_SOURCES) {
+      if (working && working !== source) continue;
+      // Pull from this source repeatedly until the budget, or it fails — in
+      // which case fall through to the next source.
+      while (performance.now() - start < DOWNLOAD_MS) {
+        let res;
+        try {
+          res = await fetch(source.url(), { cache: 'no-store', signal: controller.signal });
+        } catch (error) {
+          if (error.name === 'AbortError') throw error;
+          break; // network error — try the next source
+        }
+        lastStatus = res.status;
+        if (!res.ok || !res.body) break; // refused (e.g. 429) — try the next
+        working = source;
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received += value.length;
+          tick();
         }
       }
+      if (working === source) break; // this source carried the whole run
     }
   } catch (error) {
     if (error.name !== 'AbortError') throw error;
@@ -96,11 +120,11 @@ async function measureDownload(emit) {
     clearTimeout(timer);
   }
 
-  // No bytes moved means the endpoint refused us (rate limit / error), not a
+  // No bytes from any source means all were refused (rate limit / error), not a
   // genuine zero — report it as unavailable so the UI does not show "0 Mbps".
-  if (received === 0) return { mbps: null, status: lastStatus };
+  if (received === 0) return { mbps: null, status: lastStatus, source: null };
   const secs = (performance.now() - start) / 1000;
-  return { mbps: mbps(received, secs), status: lastStatus };
+  return { mbps: mbps(received, secs), status: lastStatus, source: working ? working.name : null };
 }
 
 async function measureUpload(emit) {
@@ -179,7 +203,7 @@ async function run(onProgress) {
   emit({ phase: 'latency-done', ...latency });
 
   const download = await measureDownload(emit);
-  emit({ phase: 'download-done', downMbps: download.mbps, status: download.status });
+  emit({ phase: 'download-done', downMbps: download.mbps, status: download.status, source: download.source });
 
   const upload = await measureUpload(emit);
   emit({ phase: 'upload-done', upMbps: upload.mbps, status: upload.status });
@@ -187,17 +211,19 @@ async function run(onProgress) {
   const lan = await measureLan(emit);
   emit({ phase: 'lan-done', lan });
 
-  // A 429/403 from the shared test endpoint means "busy", worth telling the user.
-  const busy = [download.status, upload.status].includes(429) || [download.status, upload.status].includes(403);
+  // "Busy" means a transfer could not be measured at all (every source refused),
+  // not merely that Cloudflare rate-limited before a fallback succeeded.
+  const busy = download.mbps === null || upload.mbps === null;
 
   return {
     latencyMs: latency.latencyMs,
     jitterMs: latency.jitterMs,
     downMbps: download.mbps,
     upMbps: upload.mbps,
+    source: download.source,
     busy,
     lan,
   };
 }
 
-module.exports = { run, __internals: { stats, mbps } };
+module.exports = { run, __internals: { stats, mbps, measureDownload, DOWNLOAD_SOURCES } };

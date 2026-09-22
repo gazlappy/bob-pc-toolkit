@@ -114,9 +114,11 @@ the host box is validated so nothing but a plausible host or IP reaches the
 command line.
 
 The **speed test** measures two honestly-different things. *Internet* is real
-bytes moved to and from Cloudflare's speed endpoint and timed — download and
-upload Mbps, with latency and jitter — updating live as it runs, from the main
-process where no page CSP blocks it. *Local network* is the NIC's negotiated
+bytes moved and timed — download and upload Mbps, with latency and jitter —
+updating live as it runs, from the main process where no page CSP blocks it.
+Download tries Cloudflare first and falls back to OVH then Hetzner, because
+Cloudflare rate-limits its data endpoint hard per IP after a few tests; whichever
+first delivers bytes carries the run, and the status line says which. *Local network* is the NIC's negotiated
 link rate (1 Gbps, or 100 Mbps if a bad cable dropped it) and the measured
 round-trip to the gateway. A true LAN *throughput* figure needs a cooperating
 server on the far end, so it is not invented — the link rate and gateway latency
