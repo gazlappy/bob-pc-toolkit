@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('pc', {
     },
   },
 
+  events: () => call('events:read'),
+
   repair: {
     list: () => call('repair:list'),
     start: (id) => call('repair:start', id),

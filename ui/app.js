@@ -16,6 +16,7 @@ const state = {
   keys: { data: null, loaded: false },
   network: { info: null, actions: [], loaded: false, runId: null, speedRunning: false },
   repair: { commands: [], loaded: false, runId: null, runLabel: null },
+  events: { data: null, loaded: false, search: '', filter: 'all' },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -112,6 +113,7 @@ function show(view) {
   if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'repair' && !state.repair.loaded) loadRepair();
+  if (view === 'events' && !state.events.loaded) loadEvents();
   if (view === 'backups') loadBackups();
 }
 
@@ -1440,6 +1442,177 @@ $('system-copy').addEventListener('click', async () => {
   } catch (error) {
     toast(error.message, 'error');
   }
+});
+
+/* Event log ---------------------------------------------------------------- */
+
+function eventWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderEvents() {
+  const data = state.events.data;
+  const summaryEl = $('events-summary');
+  const timelineEl = $('events-timeline');
+  const listEl = $('events-list');
+
+  if (!data) {
+    summaryEl.replaceChildren();
+    timelineEl.replaceChildren();
+    listEl.replaceChildren(empty('Reading the event logs…'));
+    return;
+  }
+
+  // Summary stat tiles.
+  const s = data.summary;
+  summaryEl.replaceChildren();
+  const grid = document.createElement('div');
+  grid.className = 'ev-summary';
+  const tiles = [
+    { n: s.bsod, l: 'Blue screens', bad: s.bsod > 0 },
+    { n: s.crash, l: 'Unexpected shutdowns', bad: s.crash > 0 },
+    { n: s.appcrash, l: 'App crashes / hangs', bad: false },
+  ];
+  for (const t of tiles) {
+    const tile = document.createElement('div');
+    tile.className = `ev-stat${t.bad ? ' bad' : ''}`;
+    const n = document.createElement('div');
+    n.className = 'n';
+    n.textContent = String(t.n);
+    const l = document.createElement('div');
+    l.className = 'l';
+    l.textContent = `${t.l} · 45 days`;
+    tile.append(n, l);
+    grid.append(tile);
+  }
+  summaryEl.append(grid);
+
+  // Crash timeline.
+  timelineEl.replaceChildren();
+  if (data.stability.length) {
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = 'Stability timeline';
+    timelineEl.append(title);
+    const box = document.createElement('div');
+    box.className = 'ev-timeline';
+    for (const crash of data.stability.slice(0, 25)) {
+      const row = document.createElement('div');
+      row.className = 'ev-crash';
+      const dot = document.createElement('span');
+      dot.className = `ev-dot ${crash.kind}`;
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = eventWhen(crash.time);
+      const what = document.createElement('span');
+      what.className = 'what';
+      const b = document.createElement('b');
+      b.textContent = crash.label;
+      what.append(b);
+      if (crash.detail) what.append(` — ${crash.detail}`);
+      row.append(dot, when, what);
+      box.append(row);
+    }
+    timelineEl.append(box);
+  }
+
+  // Filtered, deduped feed.
+  const term = state.events.search.trim().toLowerCase();
+  const filter = state.events.filter;
+  const rows = data.groups.filter((g) => {
+    if (filter === 'errors' && g.levelNum > 2) return false;
+    if (filter === 'warnings' && g.levelNum !== 3) return false;
+    if (filter === 'hinted' && !g.hint) return false;
+    if (term && !`${g.provider} ${g.id} ${g.message}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+
+  listEl.replaceChildren();
+  if (!rows.length) {
+    listEl.append(empty(term || filter !== 'all' ? 'Nothing matches.' : 'No errors or warnings — a healthy 14 days.'));
+  } else {
+    for (const g of rows) listEl.append(eventRow(g));
+  }
+
+  $('events-subtitle').textContent =
+    `${s.errors} error${s.errors === 1 ? '' : 's'} · ${s.warnings} warning${s.warnings === 1 ? '' : 's'} in 14 days` +
+    (s.bsod || s.crash ? ` · ${s.bsod + s.crash} crash${s.bsod + s.crash === 1 ? '' : 'es'}` : '');
+}
+
+function eventRow(g) {
+  const row = document.createElement('div');
+  row.className = 'ev-row';
+
+  const top = document.createElement('div');
+  top.className = 'ev-row-top';
+  const level = document.createElement('span');
+  level.className = `ev-level ${g.levelNum <= 2 ? 'err' : 'warn'}`;
+  level.textContent = g.level;
+  const src = document.createElement('span');
+  src.className = 'ev-src';
+  src.textContent = `${g.provider} · ${g.id}`;
+  const count = document.createElement('span');
+  count.className = 'ev-count';
+  count.textContent = `${g.count > 1 ? `×${g.count} · ` : ''}${eventWhen(g.latest)}`;
+  top.append(level, src, count);
+
+  const msg = document.createElement('div');
+  msg.className = 'ev-msg';
+  msg.textContent = g.message;
+
+  row.append(top, msg);
+
+  if (g.hint) {
+    const hint = document.createElement('div');
+    hint.className = 'ev-hint';
+    hint.textContent = `→ ${g.hint}`;
+    row.append(hint);
+  }
+
+  // Expand to the full message on click.
+  let full = null;
+  row.addEventListener('click', () => {
+    row.classList.toggle('open');
+    if (row.classList.contains('open')) {
+      if (!full) {
+        full = document.createElement('div');
+        full.className = 'ev-full';
+        full.textContent = g.full || g.message;
+        row.append(full);
+      }
+      full.hidden = false;
+    } else if (full) {
+      full.hidden = true;
+    }
+  });
+
+  return row;
+}
+
+async function loadEvents() {
+  state.events.loaded = false;
+  renderEvents();
+  try {
+    state.events.data = await window.pc.events();
+    state.events.loaded = true;
+    renderEvents();
+  } catch (error) {
+    state.events.loaded = true;
+    $('events-list').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('events-refresh').addEventListener('click', loadEvents);
+$('events-search').addEventListener('input', (event) => {
+  state.events.search = event.target.value;
+  if (state.events.data) renderEvents();
+});
+$('events-filter').addEventListener('change', (event) => {
+  state.events.filter = event.target.value;
+  if (state.events.data) renderEvents();
 });
 
 /* Repair ------------------------------------------------------------------- */

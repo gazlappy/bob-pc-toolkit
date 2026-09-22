@@ -58,6 +58,9 @@
           <button class="nav-item" data-view="repair">
             <span class="nav-dot"></span>Repair
           </button>
+          <button class="nav-item" data-view="events">
+            <span class="nav-dot"></span>Event log
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -310,6 +313,32 @@
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
           </div>
+        </section>
+
+        <!-- Event log -->
+        <section class="view" id="view-events">
+          <header class="view-head">
+            <div>
+              <h1>Event log</h1>
+              <p class="subtitle" id="events-subtitle">Recent errors, warnings and crashes — why this PC has been playing up.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="events-search" type="search" placeholder="Search…" />
+              <select id="events-filter">
+                <option value="all">All levels</option>
+                <option value="errors">Errors only</option>
+                <option value="warnings">Warnings only</option>
+                <option value="hinted">Explained only</option>
+              </select>
+              <button class="btn btn-ghost" id="events-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div id="events-summary"></div>
+          <div id="events-timeline"></div>
+
+          <div class="group-title">Errors &amp; warnings · last 14 days</div>
+          <div class="list" id="events-list"></div>
         </section>
 
         <!-- Repair -->

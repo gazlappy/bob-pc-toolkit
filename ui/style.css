@@ -281,6 +281,187 @@ nav {
   }
 }
 
+/* Event log */
+.ev-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ev-stat {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 14px 16px;
+}
+
+.ev-stat .n {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.ev-stat .l {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+.ev-stat.bad .n {
+  color: var(--danger);
+}
+
+.ev-timeline {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 6px 14px;
+  margin-bottom: 16px;
+}
+
+.ev-crash {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+
+.ev-crash:first-child {
+  border-top: 0;
+}
+
+.ev-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.ev-dot.bsod,
+.ev-dot.crash {
+  background: var(--danger);
+}
+
+.ev-dot.appcrash,
+.ev-dot.apphang {
+  background: var(--warn);
+}
+
+.ev-crash .when {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  width: 118px;
+}
+
+.ev-crash .what {
+  flex: 1;
+  min-width: 0;
+}
+
+.ev-crash .what b {
+  font-weight: 600;
+}
+
+.ev-row {
+  display: block;
+  padding: 11px 14px;
+  border-top: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.ev-row:first-child {
+  border-top: 0;
+}
+
+.ev-row:hover {
+  background: var(--bg-hover);
+}
+
+.ev-row-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ev-level {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.ev-level.err {
+  background: rgba(240, 86, 63, 0.16);
+  color: var(--danger);
+}
+
+.ev-level.warn {
+  background: rgba(210, 153, 34, 0.16);
+  color: var(--warn);
+}
+
+.ev-src {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.ev-count {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.ev-msg {
+  margin-top: 4px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-row.open .ev-msg {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.ev-hint {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.ev-full {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #0b0e13;
+  border-radius: 6px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+  user-select: text;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .ev-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Repair */
 .repair-cmd {
   display: flex;

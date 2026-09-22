@@ -97,6 +97,14 @@ clipboard as plain text for a job sheet. Nothing but CIM/WMI queries, so it
 changes nothing and needs no admin (though a few drive counters only appear
 elevated).
 
+**Event log** — the "why has this PC been playing up" view. Read-only. A
+stability summary (blue screens, unexpected shutdowns, app crashes over 45 days)
+and a crash timeline naming the program or bugcheck code, then the recent
+error/warning feed from the System and Application logs — **deduplicated into
+counted groups** (a warning that fired 243 times is one row, not 243), filterable
+by level and searchable, each row expandable to its full text, with a
+plain-English hint for the IDs that come up again and again.
+
 **Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
 CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
 their output streaming into the app rather than a console that closes on exit.
@@ -207,6 +215,7 @@ src/keys.js     own-machine Windows/Office product-key recovery
 src/network.js  adapter info, DNS/IP fixes, live ping & traceroute
 src/speedtest.js internet throughput (Cloudflare) + LAN link/latency
 src/repair.js   SFC / DISM / chkdsk launcher with streamed output
+src/events.js   event-log reader: stability timeline + deduped error feed
 ui/             index.html, style.css, app.js, treemap.js
 ```
 
