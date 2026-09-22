@@ -13,6 +13,7 @@ const state = {
   programs: { items: [], search: '', sort: 'size', loaded: false },
   dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
   system: { info: null, loaded: false },
+  keys: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -106,6 +107,7 @@ function show(view) {
   if (view === 'files' && !state.files.roots.length) loadRoots();
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'system' && !state.system.loaded) loadSystem();
+  if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'backups') loadBackups();
 }
 
@@ -1435,6 +1437,128 @@ $('system-copy').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Product keys ------------------------------------------------------------- */
+
+function keyRow(label, value, { mono = true } = {}) {
+  const row = document.createElement('div');
+  row.className = 'key-row';
+
+  const info = document.createElement('div');
+  info.className = 'key-info';
+  const l = document.createElement('div');
+  l.className = 'key-label';
+  l.textContent = label;
+  const v = document.createElement('div');
+  v.className = `key-value${mono ? '' : ' muted'}`;
+  v.textContent = value;
+  info.append(l, v);
+  row.append(info);
+
+  if (mono) {
+    const copy = document.createElement('button');
+    copy.className = 'btn btn-ghost btn-small';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', async () => {
+      try {
+        await window.pc.copyText(value);
+        copy.textContent = 'Copied';
+        setTimeout(() => (copy.textContent = 'Copy'), 1500);
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+    row.append(copy);
+  }
+  return row;
+}
+
+function renderKeys() {
+  const body = $('keys-body');
+  const data = state.keys.data;
+  if (!data) {
+    body.replaceChildren(empty('Reading licences…'));
+    return;
+  }
+
+  body.replaceChildren();
+  const w = data.windows;
+
+  const winCard = document.createElement('div');
+  winCard.className = 'spec-card wide';
+  const h = document.createElement('h3');
+  h.textContent = 'Windows';
+  winCard.append(h);
+  const hero = document.createElement('div');
+  hero.className = 'spec-hero';
+  hero.textContent = w.edition || 'Windows';
+  winCard.append(hero);
+  const sub = document.createElement('div');
+  sub.className = 'spec-sub';
+  sub.textContent = [w.status, w.channel].filter(Boolean).join(' · ');
+  winCard.append(sub);
+
+  const rows = document.createElement('div');
+  rows.style.marginTop = '10px';
+  if (w.oemKey) rows.append(keyRow('OEM key (in this PC’s firmware)', w.oemKey));
+  if (w.retailKey && w.retailKey !== w.oemKey) rows.append(keyRow('Installed product key', w.retailKey));
+  if (!w.oemKey && !w.retailKey) {
+    if (w.digitalLicence) {
+      rows.append(
+        keyRow(
+          'No stored key',
+          'This is a digital licence tied to a Microsoft account. Sign in with that account after a reinstall to re-activate — there is no key to copy.',
+          { mono: false }
+        )
+      );
+    } else {
+      rows.append(keyRow('Key', `Only the last five are available: …${w.partialKey || '?????'}`, { mono: false }));
+    }
+  }
+  winCard.append(rows);
+  body.append(winCard);
+
+  if (data.office.length) {
+    const label = document.createElement('div');
+    label.className = 'group-title';
+    label.textContent = `Microsoft Office · ${data.office.length}`;
+    body.append(label);
+
+    const card = document.createElement('div');
+    card.className = 'spec-card wide';
+    for (const o of data.office) {
+      card.append(
+        keyRow(
+          `${o.edition}${o.channel ? ` · ${o.channel}` : ''} · ${o.status}`,
+          `Last five: …${o.partialKey}`,
+          { mono: false }
+        )
+      );
+    }
+    const note = document.createElement('div');
+    note.className = 'spec-sub';
+    note.style.marginTop = '8px';
+    note.textContent = 'Office (Click-to-Run) does not store a recoverable full key — only the last five characters are available.';
+    card.append(note);
+    body.append(card);
+  }
+}
+
+async function loadKeys() {
+  state.keys.loaded = false;
+  $('keys-body').replaceChildren(empty('Reading licences…'));
+  try {
+    state.keys.data = await window.pc.keys();
+    state.keys.loaded = true;
+    renderKeys();
+  } catch (error) {
+    state.keys.loaded = true;
+    $('keys-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('keys-refresh').addEventListener('click', loadKeys);
 
 /* Programs ----------------------------------------------------------------- */
 

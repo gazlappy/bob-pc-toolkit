@@ -14,6 +14,7 @@ const treemap = require('./src/treemap');
 const duplicates = require('./src/duplicates');
 const programs = require('./src/programs');
 const system = require('./src/system');
+const keys = require('./src/keys');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -74,6 +75,7 @@ function progress(channel) {
 handle('sys:overview', () => sys.overview());
 handle('sys:elevate', () => sys.elevate());
 handle('system:info', () => system.info());
+handle('keys:read', () => keys.read());
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

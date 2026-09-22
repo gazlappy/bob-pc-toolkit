@@ -49,6 +49,9 @@
           <button class="nav-item" data-view="system">
             <span class="nav-dot"></span>System info
           </button>
+          <button class="nav-item" data-view="keys">
+            <span class="nav-dot"></span>Product keys
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -300,6 +303,27 @@
           </header>
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
+          </div>
+        </section>
+
+        <!-- Product keys -->
+        <section class="view" id="view-keys">
+          <header class="view-head">
+            <div>
+              <h1>Product keys</h1>
+              <p class="subtitle">Recover this machine's own Windows and Office licences before a reinstall.</p>
+            </div>
+            <button class="btn btn-ghost" id="keys-refresh">Refresh</button>
+          </header>
+          <div class="panel note-panel">
+            <ul class="notes">
+              <li>These are the licences <strong>already stored on this PC</strong> — read from firmware and the registry, changing nothing.</li>
+              <li>An <strong>OEM firmware key</strong> comes from the BIOS and re-activates automatically on a clean install of the same edition.</li>
+              <li>A <strong>digital licence</strong> (tied to a Microsoft account) has no key to retrieve — sign in with that account to re-activate.</li>
+            </ul>
+          </div>
+          <div id="keys-body">
+            <div class="empty">Reading licences…</div>
           </div>
         </section>
 

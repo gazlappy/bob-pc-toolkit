@@ -91,6 +91,16 @@ clipboard as plain text for a job sheet. Nothing but CIM/WMI queries, so it
 changes nothing and needs no admin (though a few drive counters only appear
 elevated).
 
+**Product keys** — recover this machine's *own* Windows and Office licences
+before a reinstall (the ProduKey / Keyfinder job). Read-only. It shows the
+BIOS/UEFI-embedded **OEM key** where the machine has one, and the installed
+**retail key** decoded from the registry's `DigitalProductId`. That decode is
+shown **only when its last five characters match the licence's own** (from
+`SoftwareLicensingProduct`), so a wrong or placeholder key can never be
+displayed — at worst none is. A digital licence tied to a Microsoft account is
+reported as having no retrievable key. Office (Click-to-Run) exposes only the
+last five characters, and that is all that is shown.
+
 **Backups** — every restore point the app has written, with a one-click restore.
 
 ## How it stays safe
@@ -160,6 +170,7 @@ src/treemap.js  size tree for the map, pruned per-node for the renderer
 src/duplicates.js  three-pass duplicate detection
 src/programs.js installed programs: list, measure, uninstall, force-remove
 src/system.js   read-only hardware/OS spec sheet with drive SMART health
+src/keys.js     own-machine Windows/Office product-key recovery
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

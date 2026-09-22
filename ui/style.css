@@ -281,6 +281,47 @@ nav {
   }
 }
 
+/* Product keys */
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.key-row:first-of-type {
+  border-top: 0;
+}
+
+.key-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.key-value {
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  user-select: text;
+  word-break: break-all;
+}
+
+.key-value.muted {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
 .sidebar-foot {
   margin-top: auto;
 }

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('pc', {
   overview: () => call('sys:overview'),
   elevate: () => call('sys:elevate'),
   system: () => call('system:info'),
+  keys: () => call('keys:read'),
   copyText: (text) => call('sys:copy', text),
 
   startup: {
