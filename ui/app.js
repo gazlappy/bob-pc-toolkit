@@ -17,6 +17,7 @@ const state = {
   network: { info: null, actions: [], loaded: false, runId: null, speedRunning: false },
   repair: { commands: [], loaded: false, runId: null, runLabel: null },
   events: { data: null, loaded: false, search: '', filter: 'all' },
+  devices: { data: null, loaded: false, search: '', openClasses: new Set(['Display', 'Net', 'DiskDrive']) },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -110,6 +111,7 @@ function show(view) {
   if (view === 'files' && !state.files.roots.length) loadRoots();
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'system' && !state.system.loaded) loadSystem();
+  if (view === 'devices' && !state.devices.loaded) loadDevices();
   if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'repair' && !state.repair.loaded) loadRepair();
@@ -1442,6 +1444,137 @@ $('system-copy').addEventListener('click', async () => {
   } catch (error) {
     toast(error.message, 'error');
   }
+});
+
+/* Devices ------------------------------------------------------------------ */
+
+function deviceLine(d) {
+  const bits = [];
+  if (d.driverVersion) bits.push(`driver ${d.driverVersion}`);
+  if (d.driverDate) bits.push(formatDay(d.driverDate));
+  if (d.driverProvider && !/microsoft/i.test(d.driverProvider)) bits.push(d.driverProvider);
+  else if (d.manufacturer && !bits.length) bits.push(d.manufacturer);
+  return bits.join(' · ') || (d.manufacturer || 'No driver information');
+}
+
+function renderDevices() {
+  const body = $('devices-body');
+  const data = state.devices.data;
+  if (!data) {
+    body.replaceChildren(empty('Reading devices…'));
+    return;
+  }
+
+  const term = state.devices.search.trim().toLowerCase();
+  const matches = (d) => !term || `${d.name} ${d.manufacturer || ''} ${d.driverProvider || ''} ${d.class}`.toLowerCase().includes(term);
+
+  body.replaceChildren();
+
+  // Problems first, always visible.
+  const problems = data.problems.filter(matches);
+  if (problems.length) {
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = `Needs attention · ${problems.length}`;
+    body.append(title);
+    for (const p of problems) {
+      const card = document.createElement('div');
+      card.className = 'dev-problem';
+      const dn = document.createElement('div');
+      dn.className = 'dn';
+      dn.textContent = `${p.name}  ·  ${p.class}`;
+      const pr = document.createElement('div');
+      pr.className = 'pr';
+      pr.textContent = p.problem;
+      card.append(dn, pr);
+      body.append(card);
+    }
+  }
+
+  const groupsTitle = document.createElement('div');
+  groupsTitle.className = 'group-title';
+  groupsTitle.textContent = 'All devices';
+  body.append(groupsTitle);
+
+  let shown = 0;
+  for (const group of data.groups) {
+    const items = group.items.filter(matches);
+    if (!items.length) continue;
+    shown += items.length;
+
+    const box = document.createElement('div');
+    box.className = 'dev-group';
+    // A search auto-opens matching groups; otherwise remember the toggle state.
+    const open = term ? true : state.devices.openClasses.has(group.name);
+    if (open) box.classList.add('open');
+
+    const head = document.createElement('div');
+    head.className = 'dev-group-head';
+    const chev = document.createElement('span');
+    chev.className = 'chev';
+    chev.textContent = '▶';
+    const cls = document.createElement('span');
+    cls.className = 'cls';
+    cls.textContent = group.name;
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = `${items.length}`;
+    head.append(chev, cls, cnt);
+
+    const bodyWrap = document.createElement('div');
+    bodyWrap.hidden = !open;
+    for (const d of items) {
+      const item = document.createElement('div');
+      item.className = 'dev-item';
+      const dn = document.createElement('div');
+      dn.className = 'dn';
+      dn.textContent = d.name;
+      const dd = document.createElement('div');
+      dd.className = 'dd';
+      dd.textContent = deviceLine(d);
+      item.append(dn, dd);
+      bodyWrap.append(item);
+    }
+
+    head.addEventListener('click', () => {
+      const nowOpen = !box.classList.contains('open');
+      box.classList.toggle('open', nowOpen);
+      bodyWrap.hidden = !nowOpen;
+      if (nowOpen) state.devices.openClasses.add(group.name);
+      else state.devices.openClasses.delete(group.name);
+    });
+
+    box.append(head, bodyWrap);
+    body.append(box);
+  }
+
+  if (!problems.length && !shown) {
+    body.replaceChildren(empty(term ? 'No devices match.' : 'No devices found.'));
+  }
+
+  $('devices-subtitle').textContent =
+    `${data.total} devices · ${data.withDrivers} with a driver` + (data.problems.length ? ` · ${data.problems.length} need attention` : ' · all healthy');
+  $('nav-devices-count').textContent = data.problems.length ? String(data.problems.length) : '';
+}
+
+async function loadDevices() {
+  state.devices.loaded = false;
+  renderDevices();
+  try {
+    state.devices.data = await window.pc.devices();
+    state.devices.loaded = true;
+    renderDevices();
+  } catch (error) {
+    state.devices.loaded = true;
+    $('devices-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('devices-refresh').addEventListener('click', loadDevices);
+$('devices-search').addEventListener('input', (event) => {
+  state.devices.search = event.target.value;
+  if (state.devices.data) renderDevices();
 });
 
 /* Event log ---------------------------------------------------------------- */

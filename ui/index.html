@@ -49,6 +49,10 @@
           <button class="nav-item" data-view="system">
             <span class="nav-dot"></span>System info
           </button>
+          <button class="nav-item" data-view="devices">
+            <span class="nav-dot"></span>Devices
+            <span class="nav-count" id="nav-devices-count"></span>
+          </button>
           <button class="nav-item" data-view="keys">
             <span class="nav-dot"></span>Product keys
           </button>
@@ -312,6 +316,23 @@
           </header>
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
+          </div>
+        </section>
+
+        <!-- Devices -->
+        <section class="view" id="view-devices">
+          <header class="view-head">
+            <div>
+              <h1>Devices</h1>
+              <p class="subtitle" id="devices-subtitle">Every device and the driver it's running.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="devices-search" type="search" placeholder="Search…" />
+              <button class="btn btn-ghost" id="devices-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="devices-body">
+            <div class="empty">Reading devices…</div>
           </div>
         </section>
 

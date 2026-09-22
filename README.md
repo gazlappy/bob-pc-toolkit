@@ -88,6 +88,13 @@ only the big files. The line under the breadcrumb always says which filter is in
 force and how many files matched, and changing a filter or a folder marks the
 map stale rather than leaving a picture that no longer matches the controls.
 
+**Devices** — every present device and the driver it is running (version, date,
+provider), grouped by class with the ones a technician cares about first
+(display, network, storage…), searchable and collapsible. Any device with a
+problem — the Device Manager yellow-bangs — is surfaced at the top with the
+`ConfigManagerErrorCode` translated into plain English (no driver, disabled,
+cannot start, and so on). Read-only.
+
 **System info** — a read-only spec sheet: Windows edition, build and activation
 status; make, model, motherboard and BIOS; CPU; RAM with per-module capacity,
 speed and part number; graphics; and per-drive **health** (Healthy / Warning /
@@ -216,6 +223,7 @@ src/network.js  adapter info, DNS/IP fixes, live ping & traceroute
 src/speedtest.js internet throughput (Cloudflare) + LAN link/latency
 src/repair.js   SFC / DISM / chkdsk launcher with streamed output
 src/events.js   event-log reader: stability timeline + deduped error feed
+src/devices.js  device + driver inventory, problem devices flagged
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

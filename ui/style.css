@@ -281,6 +281,82 @@ nav {
   }
 }
 
+/* Devices */
+.dev-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.dev-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dev-group-head:hover {
+  background: var(--bg-hover);
+}
+
+.dev-group-head .chev {
+  color: var(--faint);
+  font-size: 11px;
+  width: 12px;
+  transition: transform 0.12s ease;
+}
+
+.dev-group.open .dev-group-head .chev {
+  transform: rotate(90deg);
+}
+
+.dev-group-head .cls {
+  font-weight: 600;
+}
+
+.dev-group-head .cnt {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.dev-item {
+  padding: 9px 14px 9px 34px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.dev-item .dn {
+  font-size: 13px;
+}
+
+.dev-item .dd {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+  user-select: text;
+}
+
+.dev-problem {
+  border: 1px solid #4d2119;
+  border-radius: var(--radius);
+  background: rgba(240, 86, 63, 0.07);
+  padding: 11px 14px;
+  margin-bottom: 8px;
+}
+
+.dev-problem .dn {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.dev-problem .pr {
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
 /* Event log */
 .ev-summary {
   display: grid;
