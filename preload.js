@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('pc', {
     reveal: (id) => call('autoruns:reveal', id),
   },
 
+  security: () => call('security:read'),
+
   repair: {
     list: () => call('repair:list'),
     start: (id) => call('repair:start', id),

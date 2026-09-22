@@ -72,6 +72,10 @@
             <span class="nav-dot"></span>Autoruns
             <span class="nav-count nav-count-warn" id="nav-autoruns-count"></span>
           </button>
+          <button class="nav-item" data-view="security">
+            <span class="nav-dot"></span>Security
+            <span class="nav-count nav-count-warn" id="nav-security-count"></span>
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -414,6 +418,24 @@
           <div id="autoruns-summary"></div>
           <div id="autoruns-body">
             <div class="empty">Auditing autostart locations…</div>
+          </div>
+        </section>
+
+        <!-- Security posture -->
+        <section class="view" id="view-security">
+          <header class="view-head">
+            <div>
+              <h1>Security</h1>
+              <p class="subtitle" id="security-subtitle">Is this machine set up safely? A read-only health check.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="security-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div id="security-summary"></div>
+          <div id="security-body">
+            <div class="empty">Checking security settings…</div>
           </div>
         </section>
 

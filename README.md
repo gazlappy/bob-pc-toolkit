@@ -138,6 +138,18 @@ is treated as a trusted PATH binary rather than a "missing file", and the benign
 built-in NTEventLog WMI consumer is filtered out, so a clean machine reads as
 clean.
 
+**Security** — the "is this machine set up safely" check a tech runs before
+handing a PC back. Read-only. It grades Microsoft Defender (real-time on,
+definition age, tamper protection), the Firewall per profile, SmartScreen,
+BitLocker/drive encryption, UAC, the local administrator accounts and any enabled
+account with no required password, and whether a reboot is pending — each with a
+green/amber/red verdict and a plain hint on what to do. It does not change any
+setting; fixing one is a deliberate act the tech does themselves. Two things stop
+false alarms: if a third-party antivirus or firewall is registered and active,
+Defender or the Windows Firewall being off is reported as fine rather than a hole;
+and where a status genuinely needs elevation (BitLocker), it says "needs admin"
+instead of a false all-clear.
+
 **Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
 CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
 their output streaming into the app rather than a console that closes on exit.
@@ -252,6 +264,7 @@ src/events.js   event-log reader: stability timeline + deduped error feed
 src/devices.js  device + driver inventory, problem devices flagged
 src/monitor.js  live CPU/RAM/disk/net snapshot + top processes
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
+src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

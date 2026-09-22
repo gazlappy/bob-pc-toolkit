@@ -20,6 +20,7 @@ const state = {
   devices: { data: null, loaded: false, search: '', openClasses: new Set(['Display', 'Net', 'DiskDrive']) },
   monitor: { active: false, built: false, timer: null, cpuHistory: [], memHistory: [] },
   autoruns: { data: null, ext: null, loaded: false, search: '', flaggedOnly: false, openGroups: new Set(['logon', 'ifeo', 'wmi']) },
+  security: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -121,6 +122,7 @@ function show(view) {
   if (view === 'repair' && !state.repair.loaded) loadRepair();
   if (view === 'events' && !state.events.loaded) loadEvents();
   if (view === 'autoruns' && !state.autoruns.loaded) loadAutoruns();
+  if (view === 'security' && !state.security.loaded) loadSecurity();
   if (view === 'backups') loadBackups();
 }
 
@@ -2042,6 +2044,103 @@ $('autoruns-flagged-only').addEventListener('change', (event) => {
   state.autoruns.flaggedOnly = event.target.checked;
   if (state.autoruns.data) renderAutoruns();
 });
+
+/* Security posture --------------------------------------------------------- */
+
+function securityCheckRow(c) {
+  const row = document.createElement('div');
+  row.className = 'sec-check';
+
+  const dot = document.createElement('span');
+  dot.className = `sec-dot is-${c.status}`;
+  dot.title = c.status;
+
+  const main = document.createElement('div');
+  main.className = 'sec-main';
+  const label = document.createElement('div');
+  label.className = 'sec-label';
+  label.textContent = c.label;
+  main.append(label);
+  if (c.detail) {
+    const det = document.createElement('div');
+    det.className = 'sec-detail';
+    det.textContent = c.detail;
+    main.append(det);
+  }
+  if (c.hint && (c.status === 'warn' || c.status === 'bad' || c.status === 'unknown')) {
+    const hint = document.createElement('div');
+    hint.className = 'sec-hint';
+    hint.textContent = c.hint;
+    main.append(hint);
+  }
+
+  const value = document.createElement('div');
+  value.className = `sec-value is-${c.status}`;
+  value.textContent = c.value;
+
+  row.append(dot, main, value);
+  return row;
+}
+
+function renderSecurity() {
+  const body = $('security-body');
+  const data = state.security.data;
+  if (!data) {
+    body.replaceChildren(empty('Checking security settings…'));
+    return;
+  }
+
+  const s = data.summary;
+  const card = document.createElement('div');
+  const tone = s.bad ? 'is-bad' : s.warn ? 'is-warn' : 'is-good';
+  card.className = `sec-summary ${tone}`;
+  const lead = document.createElement('div');
+  lead.className = 'sec-summary-lead';
+  lead.textContent = s.bad ? 'Needs attention' : s.warn ? 'A few things to check' : 'Looks healthy';
+  const sub = document.createElement('div');
+  sub.className = 'sec-summary-sub';
+  const parts = [];
+  if (s.bad) parts.push(`${s.bad} problem${s.bad === 1 ? '' : 's'}`);
+  if (s.warn) parts.push(`${s.warn} to check`);
+  if (s.good) parts.push(`${s.good} healthy`);
+  sub.textContent = parts.join(' · ') || 'All settings read.';
+  card.append(lead, sub);
+  $('security-summary').replaceChildren(card);
+
+  body.replaceChildren();
+  for (const section of data.sections) {
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = section.label;
+    body.append(title);
+    const list = document.createElement('div');
+    list.className = 'sec-list';
+    for (const c of section.checks) list.append(securityCheckRow(c));
+    body.append(list);
+  }
+
+  const issues = s.bad + s.warn;
+  $('security-subtitle').textContent = issues
+    ? `${issues} thing${issues === 1 ? '' : 's'} worth a look · ${s.good} healthy`
+    : 'Everything checks out.';
+  $('nav-security-count').textContent = issues ? String(issues) : '';
+}
+
+async function loadSecurity() {
+  state.security.loaded = false;
+  renderSecurity();
+  try {
+    state.security.data = await window.pc.security();
+    state.security.loaded = true;
+    renderSecurity();
+  } catch (error) {
+    state.security.loaded = true;
+    $('security-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('security-refresh').addEventListener('click', loadSecurity);
 
 /* Event log ---------------------------------------------------------------- */
 

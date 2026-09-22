@@ -1902,3 +1902,136 @@ select:focus {
   text-overflow: ellipsis;
   flex: 1;
 }
+
+/* Security posture --------------------------------------------------------- */
+
+.sec-summary {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-left-width: 3px;
+}
+
+.sec-summary.is-good {
+  border-left-color: var(--good);
+}
+
+.sec-summary.is-warn {
+  border-left-color: var(--warn);
+}
+
+.sec-summary.is-bad {
+  border-left-color: var(--danger);
+}
+
+.sec-summary-lead {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sec-summary.is-good .sec-summary-lead {
+  color: var(--good);
+}
+
+.sec-summary.is-warn .sec-summary-lead {
+  color: var(--warn);
+}
+
+.sec-summary.is-bad .sec-summary-lead {
+  color: var(--danger);
+}
+
+.sec-summary-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+.sec-list {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.sec-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sec-check:first-child {
+  border-top: 0;
+}
+
+.sec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 9px;
+  margin-top: 5px;
+  background: var(--muted);
+}
+
+.sec-dot.is-good {
+  background: var(--good);
+}
+
+.sec-dot.is-warn {
+  background: var(--warn);
+}
+
+.sec-dot.is-bad {
+  background: var(--danger);
+}
+
+.sec-dot.is-info,
+.sec-dot.is-unknown {
+  background: var(--faint);
+}
+
+.sec-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sec-label {
+  font-weight: 500;
+}
+
+.sec-detail {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+  user-select: text;
+}
+
+.sec-hint {
+  color: var(--warn);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.sec-value {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+.sec-value.is-good {
+  color: var(--good);
+}
+
+.sec-value.is-warn {
+  color: var(--warn);
+}
+
+.sec-value.is-bad {
+  color: var(--danger);
+}
