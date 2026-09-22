@@ -22,6 +22,7 @@ const state = {
   autoruns: { data: null, ext: null, loaded: false, search: '', flaggedOnly: false, openGroups: new Set(['logon', 'ifeo', 'wmi']) },
   security: { data: null, loaded: false },
   battery: { data: null, loaded: false },
+  connections: { data: null, loaded: false, search: '', publicOnly: false, openListen: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -125,6 +126,7 @@ function show(view) {
   if (view === 'autoruns' && !state.autoruns.loaded) loadAutoruns();
   if (view === 'security' && !state.security.loaded) loadSecurity();
   if (view === 'battery' && !state.battery.loaded) loadBattery();
+  if (view === 'connections' && !state.connections.loaded) loadConnections();
   if (view === 'backups') loadBackups();
 }
 
@@ -2270,6 +2272,181 @@ async function loadBattery() {
 }
 
 $('battery-refresh').addEventListener('click', loadBattery);
+
+/* Connections -------------------------------------------------------------- */
+
+const SCOPE_LABEL = { public: 'Public', private: 'LAN', local: 'Local' };
+const BOUND_LABEL = { all: 'Reachable', lan: 'LAN', loopback: 'Local' };
+
+function connectionRow(entry, kind) {
+  const row = document.createElement('div');
+  row.className = `row${entry.flagged ? ' is-flagged' : ''}`;
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = entry.process;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  const where =
+    kind === 'out'
+      ? `→ ${entry.remoteAddr}:${entry.remotePort}${entry.count > 1 ? `  ×${entry.count}` : ''}`
+      : `${entry.proto} :${entry.localPort}`;
+  meta.textContent = [entry.publisher || 'No publisher', `PID ${entry.pid}`, where].filter(Boolean).join('  ·  ');
+  meta.title = entry.exe || '';
+  main.append(name, meta);
+  if (entry.flagged && entry.flagReason) {
+    const why = document.createElement('div');
+    why.className = 'ar-why';
+    why.textContent = entry.flagReason;
+    main.append(why);
+  }
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  if (entry.flagged) {
+    const t = document.createElement('span');
+    t.className = 'tag tag-warn';
+    t.textContent = 'Flagged';
+    tags.append(t);
+  }
+  const scopeTag = document.createElement('span');
+  if (kind === 'out') {
+    scopeTag.className = `tag${entry.scope === 'public' ? ' tag-scope-public' : ''}`;
+    scopeTag.textContent = SCOPE_LABEL[entry.scope] || entry.scope;
+  } else {
+    scopeTag.className = `tag${entry.bound === 'all' ? ' tag-warn' : ''}`;
+    scopeTag.textContent = BOUND_LABEL[entry.bound] || entry.bound;
+    scopeTag.title = entry.bound === 'all' ? 'Reachable from any network' : '';
+  }
+  tags.append(scopeTag);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  if (entry.exe) {
+    const reveal = document.createElement('button');
+    reveal.className = 'btn btn-ghost btn-small';
+    reveal.textContent = 'Show file';
+    reveal.addEventListener('click', () => {
+      window.pc.files.reveal(entry.exe).catch((error) => toast(error.message, 'error'));
+    });
+    actions.append(reveal);
+  }
+
+  row.append(main, tags, actions);
+  return row;
+}
+
+function renderConnections() {
+  const body = $('connections-body');
+  const data = state.connections.data;
+  if (!data) {
+    body.replaceChildren(empty('Reading network connections…'));
+    return;
+  }
+
+  const term = state.connections.search.trim().toLowerCase();
+  const pub = state.connections.publicOnly;
+  const matchOut = (c) =>
+    (!term || `${c.process} ${c.publisher || ''} ${c.remoteAddr} ${c.remotePort}`.toLowerCase().includes(term)) &&
+    (!pub || c.scope === 'public');
+  const matchListen = (c) =>
+    (!term || `${c.process} ${c.publisher || ''} ${c.proto} ${c.localPort}`.toLowerCase().includes(term)) &&
+    (!pub || c.bound === 'all');
+
+  // Summary banner.
+  const s = data.summary;
+  const card = document.createElement('div');
+  card.className = `ar-summary ${s.flagged ? 'is-warn' : 'is-good'}`;
+  const lead = document.createElement('div');
+  lead.className = 'ar-summary-lead';
+  lead.textContent = s.flagged ? `${s.flagged} connection${s.flagged === 1 ? '' : 's'} worth a look` : 'Nothing unusual';
+  const sub = document.createElement('div');
+  sub.className = 'ar-summary-sub';
+  sub.textContent = s.flagged
+    ? 'An unsigned program is holding a connection open — check what it is.'
+    : `${s.outbound} outbound · ${s.listening} listening · ${s.publicOut} to the public internet, all from signed programs.`;
+  card.append(lead, sub);
+  $('connections-summary').replaceChildren(card);
+
+  body.replaceChildren();
+
+  const outbound = data.outbound.filter(matchOut);
+  const listening = data.listening.filter(matchListen);
+
+  const outTitle = document.createElement('div');
+  outTitle.className = 'group-title';
+  outTitle.textContent = `Outbound · ${outbound.length}`;
+  body.append(outTitle);
+  if (outbound.length) {
+    const list = document.createElement('div');
+    list.className = 'sec-list';
+    for (const c of outbound) list.append(connectionRow(c, 'out'));
+    body.append(list);
+  } else {
+    body.append(empty(term || pub ? 'No matching outbound connections.' : 'Nothing is connected out right now.'));
+  }
+
+  // Listening — collapsible, closed by default (it is long and mostly system).
+  const box = document.createElement('div');
+  box.className = 'dev-group';
+  const open = term || pub ? true : state.connections.openListen;
+  if (open) box.classList.add('open');
+  const head = document.createElement('div');
+  head.className = 'dev-group-head';
+  const chev = document.createElement('span');
+  chev.className = 'chev';
+  chev.textContent = '▶';
+  const cls = document.createElement('span');
+  cls.className = 'cls';
+  cls.textContent = 'Listening';
+  const hint = document.createElement('span');
+  hint.className = 'ar-group-hint';
+  hint.textContent = 'Ports this PC accepts connections on';
+  const cnt = document.createElement('span');
+  cnt.className = 'cnt';
+  cnt.textContent = `${listening.length}`;
+  head.append(chev, cls, hint, cnt);
+  const wrap = document.createElement('div');
+  wrap.hidden = !open;
+  for (const c of listening) wrap.append(connectionRow(c, 'listen'));
+  head.addEventListener('click', () => {
+    const nowOpen = !box.classList.contains('open');
+    box.classList.toggle('open', nowOpen);
+    wrap.hidden = !nowOpen;
+    state.connections.openListen = nowOpen;
+  });
+  box.append(head, wrap);
+  body.append(box);
+
+  $('connections-subtitle').textContent = `${s.outbound} outbound · ${s.listening} listening${s.flagged ? ` · ${s.flagged} flagged` : ''}`;
+  $('nav-connections-count').textContent = s.flagged ? String(s.flagged) : '';
+}
+
+async function loadConnections() {
+  state.connections.loaded = false;
+  renderConnections();
+  try {
+    state.connections.data = await window.pc.connections();
+    state.connections.loaded = true;
+    renderConnections();
+  } catch (error) {
+    state.connections.loaded = true;
+    $('connections-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('connections-refresh').addEventListener('click', loadConnections);
+$('connections-search').addEventListener('input', (event) => {
+  state.connections.search = event.target.value;
+  if (state.connections.data) renderConnections();
+});
+$('connections-public-only').addEventListener('change', (event) => {
+  state.connections.publicOnly = event.target.checked;
+  if (state.connections.data) renderConnections();
+});
 
 /* Event log ---------------------------------------------------------------- */
 

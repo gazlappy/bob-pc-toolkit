@@ -2108,3 +2108,10 @@ select:focus {
 .bat-wear-fill.is-bad {
   background: var(--danger);
 }
+
+/* Connections -------------------------------------------------------------- */
+
+.tag-scope-public {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}

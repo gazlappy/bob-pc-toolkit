@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('pc', {
 
   security: () => call('security:read'),
   battery: () => call('battery:read'),
+  connections: () => call('connections:read'),
 
   repair: {
     list: () => call('repair:list'),

@@ -157,6 +157,17 @@ Defender or the Windows Firewall being off is reported as fine rather than a hol
 and where a status genuinely needs elevation (BitLocker), it says "needs admin"
 instead of a false all-clear.
 
+**Connections** — the security companion to Autoruns: who this PC is actually
+talking to and what it is listening for, because malware that has installed
+itself still has to phone home. Read-only. Every TCP/UDP endpoint is paired with
+its owning process (name, PID, on-disk path), loopback and LAN chatter is folded
+down so genuinely outbound traffic to the public internet stands out, and a
+connection is flagged only when the program behind it is unsigned or missing —
+a validly-signed app is trusted wherever it lives, so the many legitimate apps
+that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
+Signature checks run across a small runspace pool so a machine's worth of
+endpoints resolves in a few seconds rather than tens.
+
 **Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
 CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
 their output streaming into the app rather than a console that closes on exit.
@@ -273,6 +284,7 @@ src/monitor.js  live CPU/RAM/disk/net snapshot + top processes
 src/battery.js  battery wear %, cycle count, live charge (WMI + powercfg)
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
+src/connections.js active TCP/UDP endpoints by process, signature-flagged
 ui/             index.html, style.css, app.js, treemap.js
 ```
 
