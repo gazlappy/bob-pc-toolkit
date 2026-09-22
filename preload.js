@@ -19,6 +19,19 @@ contextBridge.exposeInMainWorld('pc', {
   keys: () => call('keys:read'),
   copyText: (text) => call('sys:copy', text),
 
+  net: {
+    info: () => call('net:info'),
+    actions: () => call('net:actions'),
+    runAction: (id) => call('net:runAction', id),
+    start: (kind, host) => call('net:start', kind, host),
+    stop: (id) => call('net:stop', id),
+    onLine: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('net:line', listener);
+      return () => ipcRenderer.removeListener('net:line', listener);
+    },
+  },
+
   startup: {
     list: () => call('startup:list'),
     tasks: () => call('startup:tasks'),

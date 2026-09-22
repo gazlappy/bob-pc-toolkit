@@ -281,6 +281,43 @@ nav {
   }
 }
 
+/* Network */
+.net-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.net-run {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.net-host {
+  flex: 1;
+  min-width: 200px;
+}
+
+.net-console {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  background: #0b0e13;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #cfe0d0;
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
 /* Product keys */
 .key-row {
   display: flex;

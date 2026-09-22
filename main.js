@@ -15,6 +15,7 @@ const duplicates = require('./src/duplicates');
 const programs = require('./src/programs');
 const system = require('./src/system');
 const keys = require('./src/keys');
+const network = require('./src/network');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -76,6 +77,14 @@ handle('sys:overview', () => sys.overview());
 handle('sys:elevate', () => sys.elevate());
 handle('system:info', () => system.info());
 handle('keys:read', () => keys.read());
+
+handle('net:info', () => network.info());
+handle('net:actions', () => network.actionList());
+handle('net:runAction', (id) => network.runAction(id));
+handle('net:start', (kind, host) => network.startLive(kind, host, (event) => {
+  if (win && !win.isDestroyed()) win.webContents.send('net:line', event);
+}));
+handle('net:stop', (id) => network.stopLive(id));
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;
@@ -124,7 +133,10 @@ app.whenReady().then(() => {
   ps.warmUp();
 });
 
-app.on('will-quit', () => ps.dispose());
+app.on('will-quit', () => {
+  network.stopAll();
+  ps.dispose();
+});
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

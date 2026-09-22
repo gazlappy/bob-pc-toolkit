@@ -52,6 +52,9 @@
           <button class="nav-item" data-view="keys">
             <span class="nav-dot"></span>Product keys
           </button>
+          <button class="nav-item" data-view="network">
+            <span class="nav-dot"></span>Network
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -303,6 +306,34 @@
           </header>
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
+          </div>
+        </section>
+
+        <!-- Network -->
+        <section class="view" id="view-network">
+          <header class="view-head">
+            <div>
+              <h1>Network</h1>
+              <p class="subtitle" id="network-subtitle">Adapters, quick fixes, and a live ping.</p>
+            </div>
+            <button class="btn btn-ghost" id="network-refresh">Refresh</button>
+          </header>
+
+          <div id="network-adapters"></div>
+
+          <div class="group-title">Quick fixes</div>
+          <div class="net-actions" id="network-actions"></div>
+
+          <div class="group-title">Ping &amp; trace</div>
+          <div class="panel">
+            <div class="net-run">
+              <input class="search net-host" id="net-host" type="text" placeholder="Host or IP, e.g. google.com" />
+              <button class="btn" id="net-ping">Ping</button>
+              <button class="btn" id="net-trace">Trace route</button>
+              <button class="btn btn-danger" id="net-stop" hidden>Stop</button>
+              <button class="btn btn-ghost btn-small" id="net-clear">Clear</button>
+            </div>
+            <pre class="net-console" id="net-console" hidden></pre>
           </div>
         </section>
 

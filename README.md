@@ -91,6 +91,13 @@ clipboard as plain text for a job sheet. Nothing but CIM/WMI queries, so it
 changes nothing and needs no admin (though a few drive counters only appear
 elevated).
 
+**Network** — every active adapter at a glance (IP, gateway, DNS, subnet, MAC,
+link speed, DHCP or static), the everyday quick fixes (flush DNS, release &
+renew, and the admin-only Winsock / TCP-IP-stack resets), and **ping / trace
+route with the output streaming live** into the app instead of a hidden console.
+The live tools are spawned directly and each run can be stopped; the host box is
+validated so nothing but a plausible host or IP reaches the command line.
+
 **Product keys** — recover this machine's *own* Windows and Office licences
 before a reinstall (the ProduKey / Keyfinder job). Read-only. It shows the
 BIOS/UEFI-embedded **OEM key** where the machine has one, and the installed
@@ -171,6 +178,7 @@ src/duplicates.js  three-pass duplicate detection
 src/programs.js installed programs: list, measure, uninstall, force-remove
 src/system.js   read-only hardware/OS spec sheet with drive SMART health
 src/keys.js     own-machine Windows/Office product-key recovery
+src/network.js  adapter info, DNS/IP fixes, live ping & traceroute
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

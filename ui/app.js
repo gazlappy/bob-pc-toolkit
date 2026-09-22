@@ -14,6 +14,7 @@ const state = {
   dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
   system: { info: null, loaded: false },
   keys: { data: null, loaded: false },
+  network: { info: null, actions: [], loaded: false, runId: null },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -108,6 +109,7 @@ function show(view) {
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'system' && !state.system.loaded) loadSystem();
   if (view === 'keys' && !state.keys.loaded) loadKeys();
+  if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'backups') loadBackups();
 }
 
@@ -1437,6 +1439,188 @@ $('system-copy').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Network ------------------------------------------------------------------ */
+
+function adapterCard(a) {
+  const card = document.createElement('div');
+  card.className = 'spec-card wide';
+  const h = document.createElement('h3');
+  h.textContent = a.connection || a.name;
+  card.append(h);
+  const hero = document.createElement('div');
+  hero.className = 'spec-hero';
+  hero.textContent = a.ipv4[0] || a.ipv6[0] || 'No address';
+  card.append(hero);
+  const sub = document.createElement('div');
+  sub.className = 'spec-sub';
+  sub.textContent = a.name;
+  card.append(sub);
+
+  const rows = [
+    ['Gateway', a.gateway],
+    ['DNS', a.dns.join(', ') || null],
+    ['Subnet mask', a.subnet],
+    ['Assigned by', a.dhcp ? `DHCP${a.dhcpServer ? ` (${a.dhcpServer})` : ''}` : 'Static'],
+    ['Link speed', a.speedMbps ? (a.speedMbps >= 1000 ? `${(a.speedMbps / 1000).toFixed(1)} Gbps` : `${a.speedMbps} Mbps`) : null],
+    ['MAC', a.mac],
+    ['Other IPv4', a.ipv4.slice(1).join(', ') || null],
+  ];
+  for (const [k, v] of rows) {
+    if (!v) continue;
+    const row = document.createElement('div');
+    row.className = 'spec-row';
+    const kEl = document.createElement('span');
+    kEl.className = 'k';
+    kEl.textContent = k;
+    const vEl = document.createElement('span');
+    vEl.className = 'v';
+    vEl.textContent = v;
+    row.append(kEl, vEl);
+    card.append(row);
+  }
+  return card;
+}
+
+function renderNetwork() {
+  const wrap = $('network-adapters');
+  wrap.replaceChildren();
+  const info = state.network.info;
+  if (!info) {
+    wrap.append(empty('Reading adapters…'));
+    return;
+  }
+  if (!info.adapters.length) {
+    wrap.append(empty('No active network adapters.'));
+  }
+  for (const a of info.adapters) wrap.append(adapterCard(a));
+
+  const actions = $('network-actions');
+  actions.replaceChildren();
+  for (const action of state.network.actions) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-small';
+    btn.textContent = action.label;
+    const blocked = action.needsAdmin && !state.admin;
+    btn.disabled = blocked;
+    if (blocked) btn.title = 'Restart as administrator to use this.';
+    btn.addEventListener('click', async () => {
+      const ok = await confirmAction({
+        title: `${action.label}?`,
+        body:
+          action.id === 'flushDns'
+            ? 'Clears the DNS resolver cache. Safe and instant.'
+            : action.id === 'renew'
+              ? 'Releases this PC’s IP address and asks the router for a fresh one. Your connection will blink.'
+              : 'This resets part of the Windows network stack and needs a restart to finish. Use it when the connection is broken in a way nothing else fixes.',
+        confirmLabel: action.label,
+        danger: action.needsAdmin,
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      const was = btn.textContent;
+      btn.textContent = 'Working…';
+      try {
+        const result = await window.pc.net.runAction(action.id);
+        toast(result.message, 'good');
+        if (action.id === 'renew') loadNetwork();
+      } catch (error) {
+        toast(error.message, 'error');
+      } finally {
+        btn.disabled = action.needsAdmin && !state.admin;
+        btn.textContent = was;
+      }
+    });
+    actions.append(btn);
+  }
+
+  $('network-subtitle').textContent = `${info.hostName} · ${info.adapters.length} active adapter${info.adapters.length === 1 ? '' : 's'}`;
+}
+
+let netConsoleLines = [];
+function netPrint(line) {
+  const el = $('net-console');
+  el.hidden = false;
+  netConsoleLines.push(line);
+  // Keep the console bounded so a long ping doesn't grow without limit.
+  if (netConsoleLines.length > 500) netConsoleLines = netConsoleLines.slice(-500);
+  el.textContent = netConsoleLines.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+function netStopUi() {
+  $('net-stop').hidden = true;
+  $('net-ping').disabled = false;
+  $('net-trace').disabled = false;
+}
+
+async function startNet(kind) {
+  const host = $('net-host').value.trim();
+  if (!host) {
+    toast('Enter a host name or IP first.', 'error');
+    return;
+  }
+  // A previous run must be stopped before another starts.
+  if (state.network.runId != null) await window.pc.net.stop(state.network.runId).catch(() => {});
+
+  netConsoleLines = [];
+  netPrint(`> ${kind === 'trace' ? 'tracert' : 'ping'} ${host}`);
+  $('net-ping').disabled = true;
+  $('net-trace').disabled = true;
+  $('net-stop').hidden = false;
+
+  try {
+    state.network.runId = await window.pc.net.start(kind, host);
+  } catch (error) {
+    netPrint(error.message);
+    netStopUi();
+  }
+}
+
+$('network-refresh').addEventListener('click', loadNetwork);
+$('net-ping').addEventListener('click', () => startNet('ping'));
+$('net-trace').addEventListener('click', () => startNet('trace'));
+$('net-host').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') startNet('ping');
+});
+$('net-stop').addEventListener('click', async () => {
+  if (state.network.runId != null) await window.pc.net.stop(state.network.runId).catch(() => {});
+  state.network.runId = null;
+  netStopUi();
+  netPrint('> stopped');
+});
+$('net-clear').addEventListener('click', () => {
+  netConsoleLines = [];
+  const el = $('net-console');
+  el.textContent = '';
+  el.hidden = true;
+});
+
+// Live lines from any running ping/trace.
+window.pc.net.onLine((event) => {
+  if (state.network.runId == null || event.id !== state.network.runId) return;
+  if (event.done) {
+    state.network.runId = null;
+    netStopUi();
+    netPrint(`> finished`);
+    return;
+  }
+  if (event.line) netPrint(event.line);
+});
+
+async function loadNetwork() {
+  try {
+    const [info, actions] = await Promise.all([window.pc.net.info(), window.pc.net.actions()]);
+    state.network.info = info;
+    state.network.actions = actions;
+    state.network.loaded = true;
+    renderNetwork();
+  } catch (error) {
+    state.network.loaded = true;
+    $('network-adapters').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
 
 /* Product keys ------------------------------------------------------------- */
 
