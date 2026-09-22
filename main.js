@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog } = require('electron');
 
 const ps = require('./src/ps');
 const sys = require('./src/sys');
@@ -25,6 +25,7 @@ const autoruns = require('./src/autoruns');
 const security = require('./src/security');
 const battery = require('./src/battery');
 const connections = require('./src/connections');
+const driverexport = require('./src/driverexport');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -112,6 +113,23 @@ handle('autoruns:reveal', (id) => autoruns.reveal(id));
 handle('security:read', () => security.read());
 handle('battery:read', () => battery.read());
 handle('connections:read', () => connections.read());
+handle('drivers:list', () => driverexport.list());
+handle('drivers:export', async () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose where to save the driver backup',
+    defaultPath: driverexport.suggestedDestination(),
+    buttonLabel: 'Save drivers here',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+  const outcome = await driverexport.exportAll(result.filePaths[0]);
+  return { canceled: false, ...outcome };
+});
+handle('drivers:reveal', (target) => {
+  if (target) shell.openPath(target);
+  return true;
+});
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

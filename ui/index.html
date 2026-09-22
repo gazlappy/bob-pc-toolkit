@@ -59,6 +59,9 @@
           <button class="nav-item" data-view="battery">
             <span class="nav-dot"></span>Battery
           </button>
+          <button class="nav-item" data-view="drivers">
+            <span class="nav-dot"></span>Driver export
+          </button>
           <button class="nav-item" data-view="keys">
             <span class="nav-dot"></span>Product keys
           </button>
@@ -444,6 +447,24 @@
           <div id="connections-summary"></div>
           <div id="connections-body">
             <div class="empty">Reading network connections…</div>
+          </div>
+        </section>
+
+        <!-- Driver export -->
+        <section class="view" id="view-drivers">
+          <header class="view-head">
+            <div>
+              <h1>Driver export</h1>
+              <p class="subtitle" id="drivers-subtitle">Back up this machine's drivers before a wipe and reinstall.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="drivers-search" type="search" placeholder="Search…" />
+              <button class="btn btn-ghost" id="drivers-refresh">Refresh</button>
+              <button class="btn btn-primary" id="drivers-export">Export all…</button>
+            </div>
+          </header>
+          <div id="drivers-body">
+            <div class="empty">Reading installed drivers…</div>
           </div>
         </section>
 

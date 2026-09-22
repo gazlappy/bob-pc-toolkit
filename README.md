@@ -112,6 +112,15 @@ counted groups** (a warning that fired 243 times is one row, not 243), filterabl
 by level and searchable, each row expandable to its full text, with a
 plain-English hint for the IDs that come up again and again.
 
+**Driver export** — back up every third-party driver on the machine to a folder
+before a wipe and reinstall, so the hardware that needs an OEM driver (Wi-Fi,
+chipset, fingerprint reader) works the moment Windows is back. The preview lists
+the third-party driver packages in use — device, provider, class, version, date —
+read from `Win32_PnPSignedDriver` so the labels are correct on any language of
+Windows. The export is `Export-WindowsDriver`, which writes one tidy subfolder
+per package into a folder you pick; that is a DISM online operation, so the button
+is disabled until the app is running as administrator.
+
 **Performance** — a live resource monitor that polls a WMI performance-counter
 snapshot every two seconds while the tab is open (and stops the moment you leave
 it, so it costs nothing in the background). CPU, memory, disk-active and
@@ -285,6 +294,7 @@ src/battery.js  battery wear %, cycle count, live charge (WMI + powercfg)
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 src/connections.js active TCP/UDP endpoints by process, signature-flagged
+src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```
 

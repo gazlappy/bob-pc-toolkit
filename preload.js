@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('pc', {
   battery: () => call('battery:read'),
   connections: () => call('connections:read'),
 
+  drivers: {
+    list: () => call('drivers:list'),
+    export: () => call('drivers:export'),
+    reveal: (target) => call('drivers:reveal', target),
+  },
+
   repair: {
     list: () => call('repair:list'),
     start: (id) => call('repair:start', id),

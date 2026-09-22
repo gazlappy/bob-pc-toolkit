@@ -23,6 +23,7 @@ const state = {
   security: { data: null, loaded: false },
   battery: { data: null, loaded: false },
   connections: { data: null, loaded: false, search: '', publicOnly: false, openListen: false },
+  drivers: { data: null, loaded: false, search: '', exporting: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -127,6 +128,7 @@ function show(view) {
   if (view === 'security' && !state.security.loaded) loadSecurity();
   if (view === 'battery' && !state.battery.loaded) loadBattery();
   if (view === 'connections' && !state.connections.loaded) loadConnections();
+  if (view === 'drivers' && !state.drivers.loaded) loadDrivers();
   if (view === 'backups') loadBackups();
 }
 
@@ -2446,6 +2448,133 @@ $('connections-search').addEventListener('input', (event) => {
 $('connections-public-only').addEventListener('change', (event) => {
   state.connections.publicOnly = event.target.checked;
   if (state.connections.data) renderConnections();
+});
+
+/* Driver export ------------------------------------------------------------ */
+
+function driverRow(pkg) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = pkg.deviceName || pkg.provider;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = [pkg.provider, pkg.version ? `v${pkg.version}` : '', pkg.date, pkg.inf]
+    .filter(Boolean)
+    .join('  ·  ');
+  main.append(name, meta);
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  if (pkg.className) {
+    const t = document.createElement('span');
+    t.className = 'tag';
+    t.textContent = pkg.className;
+    tags.append(t);
+  }
+  if (pkg.deviceCount > 1) {
+    const t = document.createElement('span');
+    t.className = 'tag';
+    t.textContent = `${pkg.deviceCount} devices`;
+    tags.append(t);
+  }
+
+  row.append(main, tags);
+  return row;
+}
+
+function updateDriverExportButton() {
+  const btn = $('drivers-export');
+  const busy = state.drivers.exporting;
+  const canExport = state.admin && state.drivers.data && state.drivers.data.total > 0;
+  btn.disabled = busy || !canExport;
+  btn.textContent = busy ? 'Exporting…' : 'Export all…';
+  btn.title = !state.admin
+    ? 'Restart as administrator to export drivers.'
+    : 'Save every third-party driver to a folder you choose.';
+}
+
+function renderDrivers() {
+  const body = $('drivers-body');
+  const data = state.drivers.data;
+  updateDriverExportButton();
+  if (!data) {
+    body.replaceChildren(empty('Reading installed drivers…'));
+    return;
+  }
+  if (!data.total) {
+    body.replaceChildren(empty('No third-party drivers found — nothing to back up.'));
+    $('drivers-subtitle').textContent = 'No third-party drivers on this machine.';
+    return;
+  }
+
+  const term = state.drivers.search.trim().toLowerCase();
+  const matches = (p) =>
+    !term || `${p.deviceName} ${p.provider} ${p.className} ${p.inf}`.toLowerCase().includes(term);
+  const shown = data.packages.filter(matches);
+
+  body.replaceChildren();
+  const title = document.createElement('div');
+  title.className = 'group-title';
+  title.textContent = `Third-party drivers · ${data.total}`;
+  body.append(title);
+  if (!shown.length) {
+    body.append(empty('Nothing matches.'));
+  } else {
+    const list = document.createElement('div');
+    list.className = 'sec-list';
+    for (const p of shown) list.append(driverRow(p));
+    body.append(list);
+  }
+
+  $('drivers-subtitle').textContent = `${data.total} third-party driver package${data.total === 1 ? '' : 's'} — export saves each to its own folder.`;
+}
+
+async function loadDrivers() {
+  state.drivers.loaded = false;
+  renderDrivers();
+  try {
+    state.drivers.data = await window.pc.drivers.list();
+    state.drivers.loaded = true;
+    renderDrivers();
+  } catch (error) {
+    state.drivers.loaded = true;
+    $('drivers-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+async function exportDrivers() {
+  if (state.drivers.exporting) return;
+  state.drivers.exporting = true;
+  updateDriverExportButton();
+  try {
+    const result = await window.pc.drivers.export();
+    if (result && result.canceled) return;
+    toast(`Exported ${result.exported} driver${result.exported === 1 ? '' : 's'} (${formatBytes(result.bytes)}).`, 'good');
+    const ok = await confirmAction({
+      title: 'Drivers exported',
+      body: `Saved ${result.exported} driver package${result.exported === 1 ? '' : 's'} (${formatBytes(result.bytes)}) to:\n\n${result.destination}`,
+      confirmLabel: 'Open folder',
+      danger: false,
+    });
+    if (ok) window.pc.drivers.reveal(result.destination).catch(() => {});
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.drivers.exporting = false;
+    updateDriverExportButton();
+  }
+}
+
+$('drivers-refresh').addEventListener('click', loadDrivers);
+$('drivers-export').addEventListener('click', exportDrivers);
+$('drivers-search').addEventListener('input', (event) => {
+  state.drivers.search = event.target.value;
+  if (state.drivers.data) renderDrivers();
 });
 
 /* Event log ---------------------------------------------------------------- */
