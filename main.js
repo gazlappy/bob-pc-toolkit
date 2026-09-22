@@ -17,6 +17,7 @@ const system = require('./src/system');
 const keys = require('./src/keys');
 const network = require('./src/network');
 const repair = require('./src/repair');
+const speedtest = require('./src/speedtest');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -86,6 +87,7 @@ handle('net:start', (kind, host) => network.startLive(kind, host, (event) => {
   if (win && !win.isDestroyed()) win.webContents.send('net:line', event);
 }));
 handle('net:stop', (id) => network.stopLive(id));
+handle('net:speedtest', () => speedtest.run(progress('net:speed')));
 
 handle('repair:list', () => repair.list());
 handle('repair:start', (id) => repair.start(id, (event) => {

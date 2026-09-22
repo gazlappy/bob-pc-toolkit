@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('pc', {
     runAction: (id) => call('net:runAction', id),
     start: (kind, host) => call('net:start', kind, host),
     stop: (id) => call('net:stop', id),
+    speedtest: () => call('net:speedtest'),
+    onSpeed: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('net:speed', listener);
+      return () => ipcRenderer.removeListener('net:speed', listener);
+    },
     onLine: (handler) => {
       const listener = (_event, payload) => handler(payload);
       ipcRenderer.on('net:line', listener);

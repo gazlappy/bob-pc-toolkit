@@ -14,7 +14,7 @@ const state = {
   dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
   system: { info: null, loaded: false },
   keys: { data: null, loaded: false },
-  network: { info: null, actions: [], loaded: false, runId: null },
+  network: { info: null, actions: [], loaded: false, runId: null, speedRunning: false },
   repair: { commands: [], loaded: false, runId: null, runLabel: null },
 };
 
@@ -1702,6 +1702,111 @@ async function startNet(kind) {
     netStopUi();
   }
 }
+
+// --- speed test ---
+function fmtSpeed(mbps) {
+  if (mbps == null) return '—';
+  if (mbps >= 100) return Math.round(mbps).toString();
+  return mbps.toFixed(1);
+}
+
+window.pc.net.onSpeed((event) => {
+  if (!state.network.speedRunning) return;
+  const status = $('speed-status');
+  switch (event.phase) {
+    case 'latency':
+      status.textContent = 'Measuring latency…';
+      break;
+    case 'latency-done':
+      $('speed-ping').textContent = event.latencyMs != null ? Math.round(event.latencyMs) : '—';
+      $('speed-ping').classList.remove('live');
+      break;
+    case 'download':
+      status.textContent = 'Testing download…';
+      $('speed-down').textContent = fmtSpeed(event.mbps);
+      $('speed-down').classList.add('live');
+      break;
+    case 'download-done':
+      $('speed-down').textContent = fmtSpeed(event.downMbps);
+      $('speed-down').classList.remove('live');
+      break;
+    case 'upload':
+      status.textContent = 'Testing upload…';
+      $('speed-up').textContent = fmtSpeed(event.mbps);
+      $('speed-up').classList.add('live');
+      break;
+    case 'upload-done':
+      $('speed-up').textContent = fmtSpeed(event.upMbps);
+      $('speed-up').classList.remove('live');
+      break;
+    case 'lan':
+      status.textContent = 'Checking local network…';
+      break;
+    default:
+      break;
+  }
+});
+
+async function runSpeedTest() {
+  if (state.network.speedRunning) return;
+  state.network.speedRunning = true;
+  const btn = $('speed-run');
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  for (const id of ['speed-down', 'speed-up', 'speed-ping']) {
+    $(id).textContent = '—';
+    $(id).classList.remove('live');
+  }
+  $('speed-lan').hidden = true;
+
+  try {
+    const result = await window.pc.net.speedtest();
+    $('speed-down').textContent = fmtSpeed(result.downMbps);
+    $('speed-up').textContent = fmtSpeed(result.upMbps);
+    $('speed-ping').textContent = result.latencyMs != null ? Math.round(result.latencyMs) : '—';
+    $('speed-down').classList.remove('live');
+    $('speed-up').classList.remove('live');
+    $('speed-status').textContent = result.busy
+      ? 'The public speed-test server is busy (too many requests). Try again in a minute.'
+      : `Done · jitter ${result.jitterMs != null ? result.jitterMs.toFixed(1) : '?'} ms · via Cloudflare`;
+
+    const lan = result.lan || {};
+    const lanEl = $('speed-lan');
+    if (lan.gateway) {
+      lanEl.replaceChildren();
+      const link = lan.linkSpeedMbps
+        ? lan.linkSpeedMbps >= 1000
+          ? `${(lan.linkSpeedMbps / 1000).toFixed(1)} Gbps`
+          : `${lan.linkSpeedMbps} Mbps`
+        : '?';
+      const parts = [
+        ['Local link', link],
+        ['Gateway', lan.gateway],
+        ['Round trip', lan.latencyMs != null ? `${lan.latencyMs.toFixed(1)} ms` : '?'],
+        ['Jitter', lan.jitterMs != null ? `${lan.jitterMs.toFixed(1)} ms` : '?'],
+        ['Loss', `${lan.lossPct ?? 0}%`],
+      ];
+      lanEl.append('Local network — ');
+      parts.forEach(([k, v], i) => {
+        if (i) lanEl.append('   ·   ');
+        lanEl.append(`${k} `);
+        const b = document.createElement('b');
+        b.textContent = v;
+        lanEl.append(b);
+      });
+      lanEl.hidden = false;
+    }
+  } catch (error) {
+    $('speed-status').textContent = `Could not complete the test: ${error.message}`;
+    toast(error.message, 'error');
+  } finally {
+    state.network.speedRunning = false;
+    btn.disabled = false;
+    btn.textContent = 'Run speed test';
+  }
+}
+
+$('speed-run').addEventListener('click', runSpeedTest);
 
 $('network-refresh').addEventListener('click', loadNetwork);
 $('net-ping').addEventListener('click', () => startNet('ping'));

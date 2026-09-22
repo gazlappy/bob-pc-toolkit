@@ -309,6 +309,76 @@ nav {
   margin-top: 2px;
 }
 
+/* Speed test */
+.speed-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.speed-tile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 16px;
+  text-align: center;
+}
+
+.speed-val {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.speed-val.live {
+  color: var(--accent);
+}
+
+.speed-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.speed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.speed-status {
+  color: var(--muted);
+  font-size: 12.5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.speed-lan {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.speed-lan b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .speed-tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Network */
 .net-actions {
   display: flex;

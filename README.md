@@ -106,11 +106,21 @@ on. SFC writes UTF-16 with carriage-return progress; the reader decodes it and
 collapses a counting percentage onto one line instead of a hundred.
 
 **Network** — every active adapter at a glance (IP, gateway, DNS, subnet, MAC,
-link speed, DHCP or static), the everyday quick fixes (flush DNS, release &
-renew, and the admin-only Winsock / TCP-IP-stack resets), and **ping / trace
-route with the output streaming live** into the app instead of a hidden console.
-The live tools are spawned directly and each run can be stopped; the host box is
-validated so nothing but a plausible host or IP reaches the command line.
+link speed, DHCP or static); a **speed test**; the everyday quick fixes (flush
+DNS, release & renew, and the admin-only Winsock / TCP-IP-stack resets); and
+**ping / trace route with the output streaming live** into the app instead of a
+hidden console. The live tools are spawned directly and each run can be stopped;
+the host box is validated so nothing but a plausible host or IP reaches the
+command line.
+
+The **speed test** measures two honestly-different things. *Internet* is real
+bytes moved to and from Cloudflare's speed endpoint and timed — download and
+upload Mbps, with latency and jitter — updating live as it runs, from the main
+process where no page CSP blocks it. *Local network* is the NIC's negotiated
+link rate (1 Gbps, or 100 Mbps if a bad cable dropped it) and the measured
+round-trip to the gateway. A true LAN *throughput* figure needs a cooperating
+server on the far end, so it is not invented — the link rate and gateway latency
+are what a technician actually checks.
 
 **Product keys** — recover this machine's *own* Windows and Office licences
 before a reinstall (the ProduKey / Keyfinder job). Read-only. It shows the
@@ -193,6 +203,7 @@ src/programs.js installed programs: list, measure, uninstall, force-remove
 src/system.js   read-only hardware/OS spec sheet with drive SMART health
 src/keys.js     own-machine Windows/Office product-key recovery
 src/network.js  adapter info, DNS/IP fixes, live ping & traceroute
+src/speedtest.js internet throughput (Cloudflare) + LAN link/latency
 src/repair.js   SFC / DISM / chkdsk launcher with streamed output
 ui/             index.html, style.css, app.js, treemap.js
 ```

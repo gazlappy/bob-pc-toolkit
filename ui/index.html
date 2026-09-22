@@ -344,6 +344,29 @@
 
           <div id="network-adapters"></div>
 
+          <div class="group-title">Speed test</div>
+          <div class="panel">
+            <div class="speed-tiles">
+              <div class="speed-tile">
+                <div class="speed-val" id="speed-down">—</div>
+                <div class="speed-label">Download · Mbps</div>
+              </div>
+              <div class="speed-tile">
+                <div class="speed-val" id="speed-up">—</div>
+                <div class="speed-label">Upload · Mbps</div>
+              </div>
+              <div class="speed-tile">
+                <div class="speed-val" id="speed-ping">—</div>
+                <div class="speed-label">Ping · ms</div>
+              </div>
+            </div>
+            <div class="speed-foot">
+              <div class="speed-status" id="speed-status">Measures real internet throughput, plus your local link and gateway latency.</div>
+              <button class="btn btn-primary" id="speed-run">Run speed test</button>
+            </div>
+            <div class="speed-lan" id="speed-lan" hidden></div>
+          </div>
+
           <div class="group-title">Quick fixes</div>
           <div class="net-actions" id="network-actions"></div>
 
