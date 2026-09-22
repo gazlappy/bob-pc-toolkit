@@ -48,11 +48,12 @@ Firefox and Brave caches, and the Recycle Bin. Every row shows its size and file
 count before anything happens.
 
 **Programs** — everything installed, biggest first, read from the same Uninstall
-keys the registry scan walks. Uninstalling launches the program's own
-uninstaller; this app never removes a program's files itself. Recorded sizes are
-whatever the installer chose to write — often absent and frequently wrong — so
-**Measure** walks the install folder for the real figure. Entries whose folder
-has gone are tagged *Files missing*.
+keys the registry scan walks. **Uninstall** launches the program's own
+uninstaller, which is always the first thing to try. **Force remove** is for
+when that uninstaller will not run — see below. Recorded sizes are whatever the
+installer chose to write — often absent and frequently wrong — so **Measure**
+walks the install folder for the real figure. Entries whose folder has gone are
+tagged *Files missing*.
 
 **Duplicates** — files whose contents are byte-for-byte identical, grouped with
 the biggest waste first. See below for how it avoids reading everything, and for
@@ -164,6 +165,53 @@ ui/             index.html, style.css, app.js, treemap.js
   next to a delete button would do more harm than the feature is worth.
 - **Browser history, cookies and saved logins.** Only caches are cleared; the
   things that sign you in and remember where you have been are left alone.
+
+### Force remove
+
+For a program whose own uninstaller is gone, crashes, or wants an installer
+source that no longer exists. It is the most dangerous thing this app does, so
+it is built so that it cannot destroy anything:
+
+- **Quarantine, not deletion.** The install folder is *renamed* into a
+  quarantine folder on the same volume. A rename is atomic — a folder with a file
+  still in use either moves whole or not at all, never half — and it has no size
+  limit. The Recycle Bin is deliberately not used here: Windows recycles "if
+  possible, otherwise deletes", so a program folder too big for the bin would be
+  gone for good.
+- **The plan comes first.** Before anything moves you see the exact folder, its
+  size and file count, the shortcuts pointing into it, and the Add/Remove
+  Programs entry. The removal itself recomputes that plan rather than trusting
+  the one you looked at.
+- **One restore point covers the lot** — folder, shortcuts and registry entry.
+  Space is only freed when you *Discard* it in Backups, and the button says how
+  much. Restoring refuses if something has since been reinstalled in the same
+  place, rather than overwriting a working install with an old copy.
+- **Order matters.** The restore point is written first, listing every planned
+  move, so a crash part way through still leaves a record. The folder moves
+  next, being the step most likely to fail — and failing there changes nothing.
+  The registry entry goes last; if that fails, everything is moved back. If
+  something cannot be moved back, the restore point is *kept* pointing at it
+  rather than thrown away.
+
+It refuses, with the reason, when:
+
+- the program was installed by **Windows Installer**. Removing its entry by hand
+  leaves Windows Installer believing it is still there, which blocks reinstalling
+  it; Microsoft's Program Install and Uninstall troubleshooter is the right tool;
+- the folder is **shared** with anything else registered, in either direction —
+  on the machine this was built on, that is what stopped Microsoft 365, Project
+  and Visio, which all live in one `Microsoft Office` folder, from being removed
+  one at a time and taking the others with them;
+- the folder is, or contains, a **protected** location — drive roots, Windows,
+  Program Files itself, ProgramData, the user profile and its known folders, or
+  this app;
+- any of its programs are **still running**;
+- it was installed for all users and the app is not running **as administrator**.
+
+Shortcuts are searched in the Start Menus and their subfolders, and at the top
+level of the desktops only. Recursing a OneDrive-synced Desktop took six seconds
+per click to find one extra shortcut inside a project folder, which was not a
+program's anyway.
 
 ### Finding duplicates
 

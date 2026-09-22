@@ -98,6 +98,8 @@ handle('programs:list', () => programs.list());
 handle('programs:measure', (id) => programs.measure(id));
 handle('programs:uninstall', (id) => programs.uninstall(id));
 handle('programs:reveal', (id) => programs.reveal(id));
+handle('programs:forcePlan', (id) => programs.forcePlan(id));
+handle('programs:forceRemove', (id) => programs.forceRemove(id));
 
 handle('registry:scan', () => registry.scan(progress('registry:progress')));
 handle('registry:clean', (ids) => registry.clean(Array.isArray(ids) ? ids : []));

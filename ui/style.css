@@ -253,6 +253,17 @@ h2 {
   background: transparent;
 }
 
+/* A destructive action that should not shout until it is needed. */
+.btn-danger-text {
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.btn-danger-text:hover:not(:disabled) {
+  border-color: rgba(240, 86, 63, 0.4);
+  background: rgba(240, 86, 63, 0.08);
+}
+
 .btn-small {
   padding: 4px 10px;
   font-size: 12px;
@@ -1051,7 +1062,7 @@ select:focus {
 }
 
 .modal {
-  width: 420px;
+  width: 480px;
   max-width: calc(100vw - 48px);
   background: var(--bg-raised);
   border: 1px solid var(--line);
@@ -1064,7 +1075,13 @@ select:focus {
   color: var(--muted);
   font-size: 13px;
   margin: 10px 0 20px;
+  /* Lets a body list what is about to happen, one thing per line. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 55vh;
+  overflow-y: auto;
 }
+
 
 .modal-actions {
   display: flex;

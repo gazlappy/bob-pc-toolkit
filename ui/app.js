@@ -45,18 +45,27 @@ function toast(message, kind) {
   }, kind === 'error' ? 6000 : 3500);
 }
 
-function confirmAction({ title, body, confirmLabel = 'Confirm', danger = true }) {
+/**
+ * A modal with Cancel and a confirm button. `alertOnly` drops the confirm
+ * button and turns Cancel into OK, for explaining why something cannot be done.
+ */
+function confirmAction({ title, body, confirmLabel = 'Confirm', danger = true, alertOnly = false }) {
   return new Promise((resolve) => {
     const backdrop = $('modal');
     const confirm = $('modal-confirm');
+    const cancel = $('modal-cancel');
     $('modal-title').textContent = title;
     $('modal-body').textContent = body;
     confirm.textContent = confirmLabel;
     confirm.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+    confirm.hidden = alertOnly;
+    cancel.textContent = alertOnly ? 'OK' : 'Cancel';
     backdrop.hidden = false;
 
     const finish = (answer) => {
       backdrop.hidden = true;
+      confirm.hidden = false;
+      cancel.textContent = 'Cancel';
       confirm.removeEventListener('click', onYes);
       $('modal-cancel').removeEventListener('click', onNo);
       backdrop.removeEventListener('click', onBackdrop);
@@ -1296,8 +1305,97 @@ function programRow(program) {
   });
   actions.append(uninstall);
 
+  const force = document.createElement('button');
+  force.className = 'btn btn-ghost btn-small btn-danger-text';
+  force.textContent = 'Force remove';
+  force.title = "For when the program's own uninstaller will not run";
+  force.addEventListener('click', () => forceRemoveProgram(program, force));
+  actions.append(force);
+
   row.append(main, tags, size, actions);
   return row;
+}
+
+/** Describes a forced-removal plan as the lines of a confirmation. */
+function describeForcePlan(plan) {
+  const lines = ["The program's own uninstaller is skipped. These are moved to quarantine:", ''];
+
+  if (plan.folder && plan.folder.exists) {
+    lines.push(`• Install folder — ${plan.folder.path}`);
+    lines.push(
+      `   ${formatBytes(plan.folder.bytes)} in ${plan.folder.files.toLocaleString('en-GB')} file${
+        plan.folder.files === 1 ? '' : 's'
+      }${plan.folder.derived ? ' · found from where its uninstaller lives' : ''}`
+    );
+  }
+  if (plan.shortcuts.length) {
+    lines.push(`• ${plan.shortcuts.length} shortcut${plan.shortcuts.length === 1 ? '' : 's'} pointing into it`);
+  }
+  lines.push(
+    `• Its entry in Add/Remove Programs${
+      plan.folder && !plan.folder.exists ? ' (the install folder is already gone)' : ''
+    }`
+  );
+  if (!plan.folder) lines.push('   No install folder was recorded, so no files are touched.');
+
+  lines.push(
+    '',
+    'Nothing is deleted yet. Restore it all from the Backups tab, or discard it there to free the space.'
+  );
+  return lines.join('\n');
+}
+
+async function forceRemoveProgram(program, button) {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Checking…';
+
+  let plan;
+  try {
+    plan = await window.pc.programs.forcePlan(program.id);
+  } catch (error) {
+    toast(error.message, 'error');
+    return;
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+
+  if (!plan.canForce) {
+    await confirmAction({
+      title: `Can't force-remove ${program.name}`,
+      body: plan.refusals.join('\n\n'),
+      alertOnly: true,
+    });
+    return;
+  }
+
+  const ok = await confirmAction({
+    title: `Force-remove ${program.name}?`,
+    body: describeForcePlan(plan),
+    confirmLabel: 'Force remove',
+  });
+  if (!ok) return;
+
+  button.disabled = true;
+  button.textContent = 'Removing…';
+  try {
+    const result = await window.pc.programs.forceRemove(program.id);
+    const extra = result.skippedShortcuts.length
+      ? ` ${result.skippedShortcuts.length} shortcut${result.skippedShortcuts.length === 1 ? ' was' : 's were'} left in place.`
+      : '';
+    toast(
+      `Removed ${result.name}${result.bytes ? ` — ${formatBytes(result.bytes)} in quarantine` : ''}. ` +
+        `Restore it or free the space from Backups.${extra}`,
+      'good'
+    );
+    await loadPrograms();
+    loadBackups();
+  } catch (error) {
+    toast(error.message, 'error');
+    button.disabled = false;
+    button.textContent = label;
+  }
 }
 
 function renderPrograms() {
@@ -1822,14 +1920,22 @@ function backupRow(item) {
   name.className = 'row-name';
   name.textContent = item.label;
 
+  const moved = item.moved || [];
+  const quarantined = item.quarantinedBytes || 0;
+  const isProgram = item.kind === 'program';
+
   const meta = document.createElement('div');
   meta.className = 'row-meta';
   const when = new Date(item.createdAt);
   meta.textContent =
     `${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ` +
     `at ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` +
-    ` · ${item.count} item${item.count === 1 ? '' : 's'} · ${formatBytes(item.bytes)}`;
-  meta.title = item.items.map((entry) => entry.description).join('\n');
+    (isProgram
+      ? quarantined
+        ? ` · ${formatBytes(quarantined)} in quarantine`
+        : ' · entry only, no files'
+      : ` · ${item.count} item${item.count === 1 ? '' : 's'} · ${formatBytes(item.bytes)}`);
+  meta.title = [...item.items.map((entry) => entry.description), ...moved.map((entry) => entry.from)].join('\n');
 
   main.append(name, meta);
 
@@ -1837,16 +1943,26 @@ function backupRow(item) {
   tags.className = 'row-tags';
   const tag = document.createElement('span');
   tag.className = 'tag';
-  tag.textContent = item.kind === 'startup' ? 'Startup' : 'Registry';
+  tag.textContent = { startup: 'Startup', program: 'Program' }[item.kind] || 'Registry';
   tags.append(tag);
+  // A removal that stopped part way: restoring puts back whatever did move.
+  if (item.status === 'pending' || item.status === 'failed') {
+    const incomplete = document.createElement('span');
+    incomplete.className = 'tag tag-warn';
+    incomplete.textContent = 'Incomplete';
+    incomplete.title = 'This removal did not finish. Restore puts back everything that was moved.';
+    tags.append(incomplete);
+  }
 
   const restore = document.createElement('button');
   restore.className = 'btn btn-small';
   restore.textContent = 'Restore';
   restore.addEventListener('click', async () => {
     const ok = await confirmAction({
-      title: 'Put these entries back?',
-      body: `${item.count} registry item${item.count === 1 ? '' : 's'} will be written back exactly as they were before removal.`,
+      title: isProgram ? `Put ${item.label.replace(/^Program: /, '')} back?` : 'Put these entries back?',
+      body: isProgram
+        ? 'Its install folder, shortcuts and Add/Remove Programs entry go back exactly where they were.'
+        : `${item.count} registry item${item.count === 1 ? '' : 's'} will be written back exactly as they were before removal.`,
       confirmLabel: 'Restore',
       danger: false,
     });
@@ -1854,7 +1970,14 @@ function backupRow(item) {
     restore.disabled = true;
     try {
       await window.pc.backups.restore(item.id);
-      toast('Restored. Sign out and back in if the entry was a startup item.', 'good');
+      toast(
+        isProgram
+          ? 'Restored. The restore point is kept — discard it once you are sure.'
+          : 'Restored. Sign out and back in if the entry was a startup item.',
+        'good'
+      );
+      loadBackups();
+      if (isProgram && state.programs.loaded) loadPrograms();
     } catch (error) {
       toast(error.message, 'error');
     } finally {
@@ -1864,17 +1987,21 @@ function backupRow(item) {
 
   const discard = document.createElement('button');
   discard.className = 'btn btn-ghost btn-small';
-  discard.textContent = 'Discard';
+  discard.textContent = quarantined ? `Discard · frees ${formatBytes(quarantined)}` : 'Discard';
   discard.addEventListener('click', async () => {
     const ok = await confirmAction({
-      title: 'Discard this restore point?',
-      body: 'The backup file is deleted. Anything it contained can no longer be put back.',
-      confirmLabel: 'Discard',
+      title: quarantined ? `Delete ${formatBytes(quarantined)} for good?` : 'Discard this restore point?',
+      body: quarantined
+        ? 'The quarantined files are deleted permanently and the space is freed. They cannot be put back after this.'
+        : 'The backup file is deleted. Anything it contained can no longer be put back.',
+      confirmLabel: quarantined ? 'Delete for good' : 'Discard',
     });
     if (!ok) return;
     try {
       await window.pc.backups.remove(item.id);
+      if (quarantined) toast(`Freed ${formatBytes(quarantined)}.`, 'good');
       loadBackups();
+      loadOverview();
     } catch (error) {
       toast(error.message, 'error');
     }

@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('pc', {
     measure: (id) => call('programs:measure', id),
     uninstall: (id) => call('programs:uninstall', id),
     reveal: (id) => call('programs:reveal', id),
+    forcePlan: (id) => call('programs:forcePlan', id),
+    forceRemove: (id) => call('programs:forceRemove', id),
   },
 
   registry: {

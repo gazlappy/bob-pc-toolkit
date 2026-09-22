@@ -91,7 +91,7 @@
               <li>Startup items are <strong>disabled, not deleted</strong> — the same reversible switch Task Manager uses. Turn one back on any time.</li>
               <li>Cleanup always <strong>scans and shows you sizes first</strong>. Nothing is removed until you tick it and press Clean.</li>
               <li>Large files and duplicate copies are moved to the <strong>Recycle Bin</strong>, never deleted outright — and a duplicate group can never lose <strong>every</strong> copy.</li>
-              <li>Uninstalling runs <strong>the program's own uninstaller</strong>; this app never removes a program's files itself.</li>
+              <li>Uninstalling runs <strong>the program's own uninstaller</strong>. When that will not run, Force remove <strong>quarantines</strong> the program rather than deleting it.</li>
               <li>Files that are open or in use are skipped rather than forced.</li>
             </ul>
           </div>
@@ -311,7 +311,8 @@
           <div class="panel note-panel">
             <h2>How this works</h2>
             <ul class="notes">
-              <li>Uninstalling runs <strong>the program's own uninstaller</strong> — this app never removes files on its behalf.</li>
+              <li>Uninstalling runs <strong>the program's own uninstaller</strong>. Use it first — it knows what it installed.</li>
+              <li>If that uninstaller will not run, <strong>Force remove</strong> moves the folder, its shortcuts and its Add/Remove Programs entry into <strong>quarantine</strong>. Nothing is deleted until you discard it in Backups, and one Restore puts it all back.</li>
               <li>Sizes come from what the installer recorded, which is often wrong or missing. <strong>Measure</strong> walks the folder for the real figure.</li>
               <li>Rows tagged <strong>Files missing</strong> are leftovers — the program is gone but its entry remains. The Registry tab clears those.</li>
             </ul>
