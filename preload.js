@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('pc', {
   devices: () => call('devices:list'),
   monitor: () => call('monitor:sample'),
 
+  autoruns: {
+    read: () => call('autoruns:read'),
+    extensions: () => call('autoruns:extensions'),
+    setEnabled: (id, enabled) => call('autoruns:setEnabled', id, enabled),
+    reveal: (id) => call('autoruns:reveal', id),
+  },
+
   repair: {
     list: () => call('repair:list'),
     start: (id) => call('repair:start', id),

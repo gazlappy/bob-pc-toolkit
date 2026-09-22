@@ -112,6 +112,32 @@ counted groups** (a warning that fired 243 times is one row, not 243), filterabl
 by level and searchable, each row expandable to its full text, with a
 plain-English hint for the IDs that come up again and again.
 
+**Performance** — a live resource monitor that polls a WMI performance-counter
+snapshot every two seconds while the tab is open (and stops the moment you leave
+it, so it costs nothing in the background). CPU, memory, disk-active and
+network-throughput gauges with a running sparkline, plus the top eight processes
+by CPU and by memory, aggregated per image name and with per-process CPU
+normalised by core count. The first sample is slow — the WMI perf provider warms
+up for a few seconds — so the tab shows a starting placeholder until the counters
+populate.
+
+**Autoruns** — the persistence auditor: the deep autostart surfaces that the
+Startup tab does not touch and Task Manager hides entirely, which is where
+malware hides to survive a reboot. Winlogon hooks, `AppInit_DLLs`, legacy
+load/run values and policy Run keys; Image File Execution Options debugger
+hijacks; auto-start services; scheduled tasks; permanent WMI event subscriptions;
+and installed browser add-ons. Every entry with a file is checked against its
+**Authenticode signature** and flagged when it looks wrong — unsigned, a missing
+file, or running from a user-writable folder — with the flagged items pulled to a
+"needs a look" list at the top and the rest grouped by category. It reads before
+it writes: only services (StartupType) and scheduled tasks (enable/disable) get a
+reversible toggle; the registry hooks, WMI subscriptions and add-ons are shown
+read-only with a Reveal button, because emptying something like `Userinit` by
+hand breaks login. A bare system-command name (`sc.exe`, `SystemPropertiesPerformance.exe`)
+is treated as a trusted PATH binary rather than a "missing file", and the benign
+built-in NTEventLog WMI consumer is filtered out, so a clean machine reads as
+clean.
+
 **Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
 CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
 their output streaming into the app rather than a console that closes on exit.
@@ -224,13 +250,18 @@ src/speedtest.js internet throughput (Cloudflare) + LAN link/latency
 src/repair.js   SFC / DISM / chkdsk launcher with streamed output
 src/events.js   event-log reader: stability timeline + deduped error feed
 src/devices.js  device + driver inventory, problem devices flagged
+src/monitor.js  live CPU/RAM/disk/net snapshot + top processes
+src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 ui/             index.html, style.css, app.js, treemap.js
 ```
 
 ### Deliberately not included
 
-- **Services.** Disabling the wrong one breaks a machine in ways that are hard
-  to diagnose, and the space saved is nil.
+- **Services, as a disk-cleanup target.** Disabling one to save space is
+  pointless — the space saved is nil — and disabling the wrong one breaks a
+  machine in ways that are hard to diagnose. Services *do* appear in the Autoruns
+  tab, but as a persistence-audit control: signature-flagged, admin-gated, and
+  reversible (it changes StartupType, it does not delete anything).
 - **Hibernation file, page file and System Restore allocation.** These are often
   the biggest single items on a disk, but a standard user cannot even read their
   sizes, so the screen would mostly say "restart as administrator" — and the one

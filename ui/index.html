@@ -68,6 +68,10 @@
           <button class="nav-item" data-view="events">
             <span class="nav-dot"></span>Event log
           </button>
+          <button class="nav-item" data-view="autoruns">
+            <span class="nav-dot"></span>Autoruns
+            <span class="nav-count nav-count-warn" id="nav-autoruns-count"></span>
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -391,6 +395,26 @@
 
           <div class="group-title">Errors &amp; warnings · last 14 days</div>
           <div class="list" id="events-list"></div>
+        </section>
+
+        <!-- Autoruns -->
+        <section class="view" id="view-autoruns">
+          <header class="view-head">
+            <div>
+              <h1>Autoruns</h1>
+              <p class="subtitle" id="autoruns-subtitle">Everything that starts itself — the deep autostart spots malware hides in.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="autoruns-search" type="search" placeholder="Search…" />
+              <label class="toggle-inline"><input type="checkbox" id="autoruns-flagged-only" /> Flagged only</label>
+              <button class="btn btn-ghost" id="autoruns-refresh">Refresh</button>
+            </div>
+          </header>
+
+          <div id="autoruns-summary"></div>
+          <div id="autoruns-body">
+            <div class="empty">Auditing autostart locations…</div>
+          </div>
         </section>
 
         <!-- Repair -->

@@ -19,6 +19,7 @@ const state = {
   events: { data: null, loaded: false, search: '', filter: 'all' },
   devices: { data: null, loaded: false, search: '', openClasses: new Set(['Display', 'Net', 'DiskDrive']) },
   monitor: { active: false, built: false, timer: null, cpuHistory: [], memHistory: [] },
+  autoruns: { data: null, ext: null, loaded: false, search: '', flaggedOnly: false, openGroups: new Set(['logon', 'ifeo', 'wmi']) },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -119,6 +120,7 @@ function show(view) {
   if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'repair' && !state.repair.loaded) loadRepair();
   if (view === 'events' && !state.events.loaded) loadEvents();
+  if (view === 'autoruns' && !state.autoruns.loaded) loadAutoruns();
   if (view === 'backups') loadBackups();
 }
 
@@ -1749,6 +1751,296 @@ $('devices-refresh').addEventListener('click', loadDevices);
 $('devices-search').addEventListener('input', (event) => {
   state.devices.search = event.target.value;
   if (state.devices.data) renderDevices();
+});
+
+/* Autoruns ----------------------------------------------------------------- */
+
+// A service (always) and a scheduled task under \Microsoft need admin to
+// change; user-owned tasks do not. The backend also guards, but disabling the
+// switch up front is clearer than a failed click.
+function autorunNeedsAdmin(entry) {
+  if (entry.actionKind === 'service') return true;
+  if (entry.actionKind === 'task') return entry.builtIn;
+  return false;
+}
+
+function autorunsRow(entry) {
+  const row = document.createElement('div');
+  row.className = `row${entry.enabled ? '' : ' is-off'}${entry.flagged ? ' is-flagged' : ''}`;
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = entry.name;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = [entry.publisher || (entry.executable ? 'No publisher' : ''), entry.location, entry.command]
+    .filter(Boolean)
+    .join('  ·  ');
+  meta.title = entry.command || '';
+  main.append(name, meta);
+  if (entry.flagged && entry.flagReason) {
+    const why = document.createElement('div');
+    why.className = 'ar-why';
+    why.textContent = entry.flagReason;
+    main.append(why);
+  }
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  if (entry.flagged) {
+    const tag = document.createElement('span');
+    tag.className = 'tag tag-warn';
+    tag.textContent = 'Flagged';
+    tags.append(tag);
+  } else if (entry.signed && entry.publisher) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'Signed';
+    tag.title = `Signed by ${entry.publisher}`;
+    tags.append(tag);
+  }
+  if (!entry.actionable) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'Read-only';
+    tag.title = 'Editing this by hand can break Windows — inspect it, then act deliberately.';
+    tags.append(tag);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+
+  if (entry.executable) {
+    const reveal = document.createElement('button');
+    reveal.className = 'btn btn-ghost btn-small';
+    reveal.textContent = 'Show file';
+    reveal.addEventListener('click', () => {
+      window.pc.autoruns.reveal(entry.id).catch((error) => toast(error.message, 'error'));
+    });
+    actions.append(reveal);
+  }
+
+  if (entry.actionable) {
+    const needsAdmin = autorunNeedsAdmin(entry) && !state.admin;
+    const label = document.createElement('label');
+    label.className = 'switch';
+    label.title = needsAdmin
+      ? 'Restart as administrator to change this.'
+      : entry.actionKind === 'service'
+        ? 'Start automatically'
+        : 'Task enabled';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = entry.enabled;
+    input.disabled = needsAdmin;
+    const track = document.createElement('span');
+    track.className = 'switch-track';
+    label.append(input, track);
+
+    input.addEventListener('change', async () => {
+      const wanted = input.checked;
+      input.disabled = true;
+      try {
+        await window.pc.autoruns.setEnabled(entry.id, wanted);
+        entry.enabled = wanted;
+        row.classList.toggle('is-off', !wanted);
+        toast(`${entry.name} ${wanted ? 'enabled' : 'disabled'}.`, 'good');
+      } catch (error) {
+        input.checked = !wanted;
+        toast(error.message, 'error');
+      } finally {
+        input.disabled = false;
+      }
+    });
+    actions.append(label);
+  }
+
+  row.append(main, tags, actions);
+  return row;
+}
+
+function extRow(ext) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = ext.name;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = [`${ext.browser} · ${ext.profile}`, ext.extId].filter(Boolean).join('  ·  ');
+  meta.title = ext.path || '';
+  main.append(name, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  if (ext.path) {
+    const reveal = document.createElement('button');
+    reveal.className = 'btn btn-ghost btn-small';
+    reveal.textContent = 'Show folder';
+    reveal.addEventListener('click', () => {
+      window.pc.files.reveal(ext.path).catch((error) => toast(error.message, 'error'));
+    });
+    actions.append(reveal);
+  }
+  row.append(main, actions);
+  return row;
+}
+
+function autorunsGroup(id, label, hint, entries, defaultOpen) {
+  const box = document.createElement('div');
+  box.className = 'dev-group';
+  const term = state.autoruns.search.trim();
+  const open = term ? true : state.autoruns.openGroups.has(id) || defaultOpen;
+  if (open) box.classList.add('open');
+
+  const head = document.createElement('div');
+  head.className = 'dev-group-head';
+  const chev = document.createElement('span');
+  chev.className = 'chev';
+  chev.textContent = '▶';
+  const cls = document.createElement('span');
+  cls.className = 'cls';
+  cls.textContent = label;
+  const hintEl = document.createElement('span');
+  hintEl.className = 'ar-group-hint';
+  hintEl.textContent = hint;
+  const cnt = document.createElement('span');
+  cnt.className = 'cnt';
+  cnt.textContent = `${entries.length}`;
+  head.append(chev, cls, hintEl, cnt);
+
+  const wrap = document.createElement('div');
+  wrap.hidden = !open;
+  for (const entry of entries) wrap.append(entry.__ext ? extRow(entry) : autorunsRow(entry));
+
+  head.addEventListener('click', () => {
+    const nowOpen = !box.classList.contains('open');
+    box.classList.toggle('open', nowOpen);
+    wrap.hidden = !nowOpen;
+    if (nowOpen) state.autoruns.openGroups.add(id);
+    else state.autoruns.openGroups.delete(id);
+  });
+
+  box.append(head, wrap);
+  return box;
+}
+
+function renderAutoruns() {
+  const body = $('autoruns-body');
+  const data = state.autoruns.data;
+  if (!data) {
+    body.replaceChildren(empty('Auditing autostart locations…'));
+    return;
+  }
+
+  const term = state.autoruns.search.trim().toLowerCase();
+  const matches = (e) =>
+    (!term || `${e.name} ${e.publisher || ''} ${e.location || ''} ${e.command || ''}`.toLowerCase().includes(term)) &&
+    (!state.autoruns.flaggedOnly || e.flagged);
+
+  // Summary banner.
+  const summary = $('autoruns-summary');
+  const card = document.createElement('div');
+  card.className = `ar-summary ${data.summary.flagged ? 'is-warn' : 'is-good'}`;
+  const big = document.createElement('div');
+  big.className = 'ar-summary-lead';
+  big.textContent = data.summary.flagged
+    ? `${data.summary.flagged} item${data.summary.flagged === 1 ? '' : 's'} worth a look`
+    : 'Nothing suspicious';
+  const sub = document.createElement('div');
+  sub.className = 'ar-summary-sub';
+  sub.textContent = data.summary.flagged
+    ? 'Unsigned, missing, or running from an unusual place. Review each before switching anything off.'
+    : `Every autostart entry is signed and accounted for — ${data.summary.services} services, ${data.summary.tasks} tasks checked.`;
+  card.append(big, sub);
+  summary.replaceChildren(card);
+
+  body.replaceChildren();
+
+  // Flagged first, always visible.
+  const flagged = [];
+  for (const g of data.groups) for (const e of g.entries) if (e.flagged && matches(e)) flagged.push(e);
+  if (flagged.length) {
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = `Needs a look · ${flagged.length}`;
+    body.append(title);
+    const list = document.createElement('div');
+    list.className = 'ar-flaglist';
+    for (const e of flagged) list.append(autorunsRow(e));
+    body.append(list);
+  }
+
+  // Category groups.
+  let shown = 0;
+  for (const g of data.groups) {
+    const items = g.entries.filter(matches);
+    if (!items.length) continue;
+    shown += items.length;
+    const defaultOpen = g.id === 'logon' || g.id === 'ifeo' || g.id === 'wmi';
+    body.append(autorunsGroup(g.id, g.label, g.hint, items, defaultOpen));
+  }
+
+  // Browser add-ons (filled in after the main audit).
+  const ext = state.autoruns.ext;
+  if (ext && ext.length && !state.autoruns.flaggedOnly) {
+    const extItems = ext
+      .filter((x) => !term || `${x.name} ${x.browser} ${x.extId}`.toLowerCase().includes(term))
+      .map((x) => ({ ...x, __ext: true }));
+    if (extItems.length) {
+      shown += extItems.length;
+      body.append(autorunsGroup('ext', 'Browser add-ons', 'Installed browser extensions', extItems, false));
+    }
+  }
+
+  if (!flagged.length && !shown) {
+    const msg = term
+      ? 'Nothing matches.'
+      : state.autoruns.flaggedOnly
+        ? 'Nothing flagged — all clear.'
+        : 'No autostart entries found.';
+    body.replaceChildren(empty(msg));
+  }
+
+  $('autoruns-subtitle').textContent = `${data.summary.total} autostart entries · ${data.summary.flagged} flagged`;
+  $('nav-autoruns-count').textContent = data.summary.flagged ? String(data.summary.flagged) : '';
+}
+
+async function loadAutoruns() {
+  state.autoruns.loaded = false;
+  state.autoruns.ext = null;
+  renderAutoruns();
+  try {
+    state.autoruns.data = await window.pc.autoruns.read();
+    state.autoruns.loaded = true;
+    renderAutoruns();
+    // Browser add-ons are slower; fill them in once the audit is painted.
+    window.pc.autoruns
+      .extensions()
+      .then((res) => {
+        state.autoruns.ext = res.extensions;
+        renderAutoruns();
+      })
+      .catch(() => {});
+  } catch (error) {
+    state.autoruns.loaded = true;
+    $('autoruns-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('autoruns-refresh').addEventListener('click', loadAutoruns);
+$('autoruns-search').addEventListener('input', (event) => {
+  state.autoruns.search = event.target.value;
+  if (state.autoruns.data) renderAutoruns();
+});
+$('autoruns-flagged-only').addEventListener('change', (event) => {
+  state.autoruns.flaggedOnly = event.target.checked;
+  if (state.autoruns.data) renderAutoruns();
 });
 
 /* Event log ---------------------------------------------------------------- */
