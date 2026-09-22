@@ -18,6 +18,7 @@ const state = {
   repair: { commands: [], loaded: false, runId: null, runLabel: null },
   events: { data: null, loaded: false, search: '', filter: 'all' },
   devices: { data: null, loaded: false, search: '', openClasses: new Set(['Display', 'Net', 'DiskDrive']) },
+  monitor: { active: false, built: false, timer: null, cpuHistory: [], memHistory: [] },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -112,6 +113,8 @@ function show(view) {
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'system' && !state.system.loaded) loadSystem();
   if (view === 'devices' && !state.devices.loaded) loadDevices();
+  if (view === 'monitor') startMonitor();
+  else stopMonitor();
   if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'repair' && !state.repair.loaded) loadRepair();
@@ -1445,6 +1448,177 @@ $('system-copy').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Performance monitor ------------------------------------------------------ */
+
+function fmtRate(bytesPerSec) {
+  const b = bytesPerSec || 0;
+  if (b < 1024) return `${Math.round(b)} B/s`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB/s`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB/s`;
+}
+
+function fillClass(pct) {
+  return pct >= 90 ? 'full' : pct >= 70 ? 'tight' : '';
+}
+
+// A small SVG sparkline from a history array of 0-100 values.
+function sparkPoints(history, width, height) {
+  if (history.length < 2) return '';
+  const max = history.length - 1;
+  return history
+    .map((v, i) => {
+      const x = (i / max) * width;
+      const y = height - (Math.max(0, Math.min(100, v)) / 100) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+function buildGauges() {
+  const wrap = $('monitor-gauges');
+  wrap.replaceChildren();
+  const specs = [
+    { id: 'cpu', label: 'CPU', spark: true },
+    { id: 'mem', label: 'Memory', spark: true },
+    { id: 'disk', label: 'Disk active', spark: false },
+    { id: 'net', label: 'Network', spark: false },
+  ];
+  for (const spec of specs) {
+    const g = document.createElement('div');
+    g.className = 'gauge';
+    const top = document.createElement('div');
+    top.className = 'g-top';
+    const label = document.createElement('span');
+    label.className = 'g-label';
+    label.textContent = spec.label;
+    const val = document.createElement('span');
+    val.className = 'g-val';
+    val.id = `g-${spec.id}-val`;
+    val.textContent = '—';
+    top.append(label, val);
+
+    const sub = document.createElement('div');
+    sub.className = 'g-sub';
+    sub.id = `g-${spec.id}-sub`;
+
+    g.append(top, sub);
+
+    if (spec.spark) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 100 26');
+      svg.setAttribute('preserveAspectRatio', 'none');
+      svg.classList.add('g-spark');
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke-width', '1.5');
+      line.setAttribute('vector-effect', 'non-scaling-stroke');
+      // A CSS var only resolves as a style property, not as an SVG attribute.
+      line.style.stroke = 'var(--accent)';
+      line.id = `g-${spec.id}-spark`;
+      svg.append(line);
+      g.append(svg);
+    } else {
+      const bar = document.createElement('div');
+      bar.className = 'g-bar';
+      const fill = document.createElement('div');
+      fill.className = 'g-fill';
+      fill.id = `g-${spec.id}-fill`;
+      fill.style.width = '0%';
+      bar.append(fill);
+      g.append(bar);
+    }
+    wrap.append(g);
+  }
+}
+
+function procRows(container, list, kind) {
+  container.replaceChildren();
+  if (!list.length) {
+    container.append(empty('—'));
+    return;
+  }
+  for (const p of list) {
+    const row = document.createElement('div');
+    row.className = 'mon-row';
+    const name = document.createElement('div');
+    name.className = 'm-name';
+    name.textContent = p.name;
+    if (p.count > 1) {
+      const cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = `  ×${p.count}`;
+      name.append(cnt);
+    }
+    const val = document.createElement('div');
+    val.className = 'm-val';
+    val.textContent = kind === 'cpu' ? `${p.cpu.toFixed(0)}%` : formatBytes(p.mem);
+    row.append(name, val);
+    container.append(row);
+  }
+}
+
+function applySample(s) {
+  state.monitor.built || (buildGauges(), (state.monitor.built = true));
+
+  $('g-cpu-val').textContent = `${s.cpu}%`;
+  $('g-cpu-sub').textContent = `${s.cores} cores`;
+  $('g-mem-val').textContent = `${s.mem.pct}%`;
+  $('g-mem-sub').textContent = `${formatBytes(s.mem.used)} of ${formatBytes(s.mem.total)}`;
+  $('g-disk-val').textContent = `${s.disk.pct}%`;
+  $('g-disk-sub').textContent = fmtRate(s.disk.bytesPerSec);
+  $('g-net-val').textContent = fmtRate(s.net.bytesPerSec);
+  $('g-net-sub').textContent = 'throughput';
+
+  const diskFill = $('g-disk-fill');
+  diskFill.style.width = `${s.disk.pct}%`;
+  diskFill.className = `g-fill ${fillClass(s.disk.pct)}`;
+
+  // Histories + sparklines for CPU and memory.
+  state.monitor.cpuHistory.push(s.cpu);
+  state.monitor.memHistory.push(s.mem.pct);
+  if (state.monitor.cpuHistory.length > 60) state.monitor.cpuHistory.shift();
+  if (state.monitor.memHistory.length > 60) state.monitor.memHistory.shift();
+  const cpuSpark = $('g-cpu-spark');
+  if (cpuSpark) cpuSpark.setAttribute('points', sparkPoints(state.monitor.cpuHistory, 100, 26));
+  const memSpark = $('g-mem-spark');
+  if (memSpark) {
+    memSpark.setAttribute('points', sparkPoints(state.monitor.memHistory, 100, 26));
+    memSpark.style.stroke = s.mem.pct >= 90 ? 'var(--danger)' : s.mem.pct >= 70 ? 'var(--warn)' : 'var(--accent)';
+  }
+
+  procRows($('monitor-cpu'), s.topCpu, 'cpu');
+  procRows($('monitor-mem'), s.topMem, 'mem');
+
+  $('monitor-subtitle').textContent = `${s.processCount} processes · updating every 2s`;
+  $('monitor-live').hidden = false;
+}
+
+async function pollMonitor() {
+  if (!state.monitor.active) return;
+  try {
+    const s = await window.pc.monitor();
+    if (state.monitor.active) applySample(s);
+  } catch (error) {
+    if (state.monitor.active) $('monitor-subtitle').textContent = `Paused: ${error.message}`;
+  }
+  if (state.monitor.active) state.monitor.timer = setTimeout(pollMonitor, 2000);
+}
+
+function startMonitor() {
+  if (state.monitor.active) return;
+  state.monitor.active = true;
+  if (!state.monitor.built) {
+    $('monitor-gauges').replaceChildren(empty('Starting the performance counters…'));
+  }
+  pollMonitor();
+}
+
+function stopMonitor() {
+  state.monitor.active = false;
+  clearTimeout(state.monitor.timer);
+  $('monitor-live').hidden = true;
+}
 
 /* Devices ------------------------------------------------------------------ */
 

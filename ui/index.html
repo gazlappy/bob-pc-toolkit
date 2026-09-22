@@ -53,6 +53,9 @@
             <span class="nav-dot"></span>Devices
             <span class="nav-count" id="nav-devices-count"></span>
           </button>
+          <button class="nav-item" data-view="monitor">
+            <span class="nav-dot"></span>Performance
+          </button>
           <button class="nav-item" data-view="keys">
             <span class="nav-dot"></span>Product keys
           </button>
@@ -316,6 +319,34 @@
           </header>
           <div id="system-body">
             <div class="empty">Reading this machine…</div>
+          </div>
+        </section>
+
+        <!-- Performance -->
+        <section class="view" id="view-monitor">
+          <header class="view-head">
+            <div>
+              <h1>Performance</h1>
+              <p class="subtitle" id="monitor-subtitle">Live CPU, memory, disk and network — and what's using them.</p>
+            </div>
+            <div class="head-actions">
+              <span class="live-dot" id="monitor-live" hidden>● live</span>
+            </div>
+          </header>
+
+          <div class="mon-gauges" id="monitor-gauges">
+            <div class="empty">Starting the performance counters…</div>
+          </div>
+
+          <div class="mon-cols">
+            <div>
+              <div class="group-title">Top by CPU</div>
+              <div class="list" id="monitor-cpu"></div>
+            </div>
+            <div>
+              <div class="group-title">Top by memory</div>
+              <div class="list" id="monitor-mem"></div>
+            </div>
           </div>
         </section>
 

@@ -281,6 +281,132 @@ nav {
   }
 }
 
+/* Performance monitor */
+.live-dot {
+  color: var(--good);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mon-gauges {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.gauge {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.gauge .g-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.gauge .g-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gauge .g-val {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.gauge .g-sub {
+  color: var(--faint);
+  font-size: 12px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge .g-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: #0b0e13;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.gauge .g-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.gauge .g-fill.tight {
+  background: var(--warn);
+}
+
+.gauge .g-fill.full {
+  background: var(--danger);
+}
+
+.gauge .g-spark {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin-top: 8px;
+}
+
+.mon-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.mon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.mon-row:first-child {
+  border-top: 0;
+}
+
+.mon-row .m-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.mon-row .m-name .cnt {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.mon-row .m-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 820px) {
+  .mon-gauges {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mon-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Devices */
 .dev-group {
   border: 1px solid var(--line);

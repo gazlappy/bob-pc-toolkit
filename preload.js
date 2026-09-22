@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('pc', {
 
   events: () => call('events:read'),
   devices: () => call('devices:list'),
+  monitor: () => call('monitor:sample'),
 
   repair: {
     list: () => call('repair:list'),
