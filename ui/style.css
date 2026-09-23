@@ -2219,3 +2219,90 @@ select:focus {
   font-size: 12px;
   margin-top: 2px;
 }
+
+/* Disks & partitions ------------------------------------------------------- */
+
+.disk-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.disk-head {
+  margin-bottom: 12px;
+}
+
+.disk-title {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.disk-tags {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.disk-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+.disk-bar {
+  display: flex;
+  height: 34px;
+  border-radius: 6px;
+  overflow: hidden;
+  gap: 2px;
+  margin-bottom: 12px;
+  background: var(--bg);
+}
+
+.disk-seg {
+  min-width: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.disk-seg-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.disk-seg.is-free {
+  background: repeating-linear-gradient(45deg, #1a1f26, #1a1f26 6px, #212832 6px, #212832 12px);
+}
+
+.disk-parts {
+  border-top: 1px solid var(--line-soft);
+}
+
+.part-usebar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+  margin-top: 6px;
+  max-width: 320px;
+}
+
+.part-usebar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.part-usebar-fill.is-full {
+  background: var(--warn);
+}

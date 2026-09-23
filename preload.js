@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('pc', {
     list: () => call('quickcmd:list'),
     run: (id) => call('quickcmd:run', id),
   },
+
+  disks: {
+    read: () => call('partition:read'),
+    setLetter: (disk, part, letter) => call('partition:setLetter', disk, part, letter),
+    setLabel: (disk, part, label) => call('partition:setLabel', disk, part, label),
+  },
   connections: () => call('connections:read'),
 
   accounts: {

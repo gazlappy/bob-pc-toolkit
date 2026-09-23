@@ -28,6 +28,7 @@ const connections = require('./src/connections');
 const driverexport = require('./src/driverexport');
 const accounts = require('./src/accounts');
 const quickcmd = require('./src/quickcmd');
+const partition = require('./src/partition');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -140,6 +141,9 @@ handle('accounts:setAdmin', (name, isAdmin) => accounts.setAdmin(name, isAdmin))
 handle('accounts:remove', (name) => accounts.remove(name));
 handle('quickcmd:list', () => quickcmd.list());
 handle('quickcmd:run', (id) => quickcmd.run(id));
+handle('partition:read', () => partition.read());
+handle('partition:setLetter', (disk, part, letter) => partition.setLetter(disk, part, letter));
+handle('partition:setLabel', (disk, part, label) => partition.setLabel(disk, part, label));
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

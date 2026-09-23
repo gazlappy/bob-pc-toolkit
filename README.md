@@ -121,6 +121,17 @@ Windows. The export is `Export-WindowsDriver`, which writes one tidy subfolder
 per package into a folder you pick; that is a DISM online operation, so the button
 is disabled until the app is running as administrator.
 
+**Disks & partitions** — a Disk-Management-style view of every physical disk: its
+model, bus, style (MBR/GPT) and health, a proportional bar of how it is carved
+up, and each partition's letter, label, filesystem and how full it is. The two
+edits wired here are the reversible, non-destructive ones — change a drive letter,
+rename a volume — and they are refused on the partitions that must not be touched
+(the disk Windows booted from, the EFI system partition, MSR, recovery), resolved
+from Windows' own flags rather than trusting the UI. The destructive operations
+(create / format / resize / delete) are deliberately not wired in yet: a partition
+editor that can wipe a volume has to be driven against a scratch disk before it
+ships, not just written.
+
 **Performance** — a live resource monitor that polls a WMI performance-counter
 snapshot every two seconds while the tab is open (and stops the moment you leave
 it, so it costs nothing in the background). CPU, memory, disk-active and
@@ -319,6 +330,7 @@ src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, grad
 src/connections.js active TCP/UDP endpoints by process, signature-flagged
 src/accounts.js local users: create, reset password, enable, promote, delete
 src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance actions
+src/partition.js disk/partition viewer + reversible drive-letter/label edits
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

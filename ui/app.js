@@ -26,6 +26,7 @@ const state = {
   drivers: { data: null, loaded: false, search: '', exporting: false },
   accounts: { data: null, loaded: false },
   toolbox: { data: null, loaded: false, search: '', running: null },
+  disks: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -133,6 +134,7 @@ function show(view) {
   if (view === 'drivers' && !state.drivers.loaded) loadDrivers();
   if (view === 'accounts' && !state.accounts.loaded) loadAccounts();
   if (view === 'toolbox' && !state.toolbox.loaded) loadToolbox();
+  if (view === 'disks' && !state.disks.loaded) loadDisks();
   if (view === 'backups') loadBackups();
 }
 
@@ -2909,6 +2911,248 @@ $('toolbox-search').addEventListener('input', (event) => {
   state.toolbox.search = event.target.value;
   if (state.toolbox.data) renderToolbox();
 });
+
+/* Disks & partitions ------------------------------------------------------- */
+
+// A generic single-field text prompt. Resolves with the string, or null on cancel.
+function promptText({ title, label, value = '', placeholder = '', confirmLabel = 'OK', maxLength }) {
+  return new Promise((resolve) => {
+    const backdrop = $('prompt-modal');
+    const input = $('prompt-input');
+    const confirm = $('prompt-confirm');
+    const cancel = $('prompt-cancel');
+    $('prompt-title').textContent = title;
+    $('prompt-label').textContent = label;
+    $('prompt-hint').textContent = '';
+    confirm.textContent = confirmLabel;
+    input.value = value;
+    input.placeholder = placeholder;
+    if (maxLength) input.maxLength = maxLength;
+    else input.removeAttribute('maxlength');
+    backdrop.hidden = false;
+    setTimeout(() => input.focus(), 30);
+    const finish = (v) => {
+      backdrop.hidden = true;
+      confirm.removeEventListener('click', onYes);
+      cancel.removeEventListener('click', onNo);
+      input.removeEventListener('keydown', onKey);
+      backdrop.removeEventListener('click', onBackdrop);
+      resolve(v);
+    };
+    const onYes = () => finish(input.value);
+    const onNo = () => finish(null);
+    const onKey = (e) => { if (e.key === 'Enter') onYes(); if (e.key === 'Escape') onNo(); };
+    const onBackdrop = (e) => { if (e.target === backdrop) finish(null); };
+    confirm.addEventListener('click', onYes);
+    cancel.addEventListener('click', onNo);
+    input.addEventListener('keydown', onKey);
+    backdrop.addEventListener('click', onBackdrop);
+  });
+}
+
+const SEG_COLORS = ['#3b6db8', '#2f8a6b', '#9a6a2f', '#7a4fa0', '#4a7d9c', '#8a5a5a'];
+
+function diskCard(disk) {
+  const card = document.createElement('div');
+  card.className = 'disk-card';
+
+  const head = document.createElement('div');
+  head.className = 'disk-head';
+  const title = document.createElement('div');
+  title.className = 'disk-title';
+  title.textContent = `Disk ${disk.number} · ${disk.friendlyName || 'Unknown'}`;
+  const tagWrap = document.createElement('span');
+  tagWrap.className = 'disk-tags';
+  const addTag = (text, cls) => {
+    const t = document.createElement('span');
+    t.className = `tag${cls ? ` ${cls}` : ''}`;
+    t.textContent = text;
+    tagWrap.append(t);
+  };
+  if (disk.busType) addTag(disk.busType);
+  if (disk.isSystem) addTag('System', 'tag-scope-public');
+  if (disk.isOffline) addTag('Offline', 'tag-warn');
+  if (disk.health && disk.health !== 'Healthy') addTag(disk.health, 'tag-warn');
+  title.append(tagWrap);
+  const sub = document.createElement('div');
+  sub.className = 'disk-sub';
+  sub.textContent = `${formatBytes(disk.size)} · ${disk.partitionStyle}${disk.health ? ` · ${disk.health}` : ''}${disk.unallocated > 1e7 ? ` · ${formatBytes(disk.unallocated)} unallocated` : ''}`;
+  head.append(title, sub);
+  card.append(head);
+
+  // Proportional partition bar.
+  const bar = document.createElement('div');
+  bar.className = 'disk-bar';
+  disk.partitions.forEach((p, i) => {
+    const seg = document.createElement('div');
+    seg.className = `disk-seg${p.protected ? ' is-protected' : ''}`;
+    seg.style.flexGrow = String(Math.max(Number(p.size) || 1, 1));
+    seg.style.background = p.protected ? '#3a4149' : SEG_COLORS[i % SEG_COLORS.length];
+    seg.title = `${p.driveLetter ? p.driveLetter + ': ' : ''}${p.label || p.type} — ${formatBytes(p.size)}`;
+    const segLabel = document.createElement('span');
+    segLabel.className = 'disk-seg-label';
+    segLabel.textContent = p.driveLetter ? `${p.driveLetter}:` : p.type.slice(0, 4);
+    seg.append(segLabel);
+    bar.append(seg);
+  });
+  if (disk.unallocated > 1e7) {
+    const free = document.createElement('div');
+    free.className = 'disk-seg is-free';
+    free.style.flexGrow = String(disk.unallocated);
+    free.title = `Unallocated — ${formatBytes(disk.unallocated)}`;
+    bar.append(free);
+  }
+  card.append(bar);
+
+  // Partition rows.
+  const list = document.createElement('div');
+  list.className = 'disk-parts';
+  for (const p of disk.partitions) list.append(partitionRow(disk, p));
+  card.append(list);
+
+  return card;
+}
+
+function partitionRow(disk, p) {
+  const admin = state.admin;
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = `${p.driveLetter ? `${p.driveLetter}:  ` : ''}${p.label || p.type}`;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = [
+    formatBytes(p.size),
+    p.fileSystem || null,
+    p.used != null ? `${formatBytes(p.used)} used · ${formatBytes(p.free)} free` : null,
+    `type ${p.type}`,
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
+  main.append(name, meta);
+  if (p.used != null && p.size) {
+    const bar = document.createElement('div');
+    bar.className = 'part-usebar';
+    const fill = document.createElement('div');
+    fill.className = 'part-usebar-fill';
+    const pct = Math.round((p.used / p.size) * 100);
+    fill.style.width = `${pct}%`;
+    if (pct >= 90) fill.classList.add('is-full');
+    bar.append(fill);
+    main.append(bar);
+  }
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  if (p.protected) {
+    const t = document.createElement('span');
+    t.className = 'tag';
+    t.textContent = 'Protected';
+    t.title = 'System, boot, EFI or recovery — not editable here.';
+    tags.append(t);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  const mkBtn = (label, handler, disabled, title) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-ghost btn-small';
+    b.textContent = label;
+    b.disabled = !admin || disabled;
+    b.title = !admin ? 'Restart as administrator to change partitions.' : title || '';
+    b.addEventListener('click', handler);
+    return b;
+  };
+
+  actions.append(
+    mkBtn('Change letter', async () => {
+      const letter = await promptText({
+        title: `Drive letter for ${p.label || p.type}`,
+        label: 'New drive letter (A–Z)',
+        value: p.driveLetter || '',
+        maxLength: 1,
+        confirmLabel: 'Change',
+      });
+      if (letter == null) return;
+      try {
+        await window.pc.disks.setLetter(disk.number, p.partitionNumber, letter);
+        toast(`Drive letter changed to ${letter.toUpperCase()}:.`, 'good');
+        loadDisks();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }, p.protected, p.protected ? 'Protected partition.' : '')
+  );
+
+  actions.append(
+    mkBtn('Rename', async () => {
+      const label = await promptText({
+        title: `Rename ${p.driveLetter}:`,
+        label: 'Volume label',
+        value: p.label || '',
+        maxLength: 32,
+        confirmLabel: 'Rename',
+      });
+      if (label == null) return;
+      try {
+        await window.pc.disks.setLabel(disk.number, p.partitionNumber, label);
+        toast(`Renamed to “${label}”.`, 'good');
+        loadDisks();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }, !p.driveLetter, !p.driveLetter ? 'No drive letter to label.' : '')
+  );
+
+  row.append(main, tags, actions);
+  return row;
+}
+
+function renderDisks() {
+  const body = $('disks-body');
+  const data = state.disks.data;
+  const banner = $('disks-banner');
+  banner.replaceChildren();
+  if (!state.admin) {
+    const b = document.createElement('div');
+    b.className = 'ar-summary is-warn';
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = 'Read-only — not running as administrator';
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = 'You can see the layout, but changing a drive letter or label needs admin.';
+    b.append(lead, sub);
+    banner.append(b);
+  }
+  if (!data) {
+    body.replaceChildren(empty('Reading disks…'));
+    return;
+  }
+  body.replaceChildren();
+  for (const disk of data.disks) body.append(diskCard(disk));
+  $('disks-subtitle').textContent = `${data.summary.disks} disk${data.summary.disks === 1 ? '' : 's'} · Windows on ${data.summary.systemDrive}`;
+}
+
+async function loadDisks() {
+  state.disks.loaded = false;
+  renderDisks();
+  try {
+    state.disks.data = await window.pc.disks.read();
+    state.disks.loaded = true;
+    renderDisks();
+  } catch (error) {
+    state.disks.loaded = true;
+    $('disks-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('disks-refresh').addEventListener('click', loadDisks);
 
 /* Event log ---------------------------------------------------------------- */
 

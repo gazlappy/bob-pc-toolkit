@@ -53,6 +53,9 @@
             <span class="nav-dot"></span>Devices
             <span class="nav-count" id="nav-devices-count"></span>
           </button>
+          <button class="nav-item" data-view="disks">
+            <span class="nav-dot"></span>Disks &amp; partitions
+          </button>
           <button class="nav-item" data-view="monitor">
             <span class="nav-dot"></span>Performance
           </button>
@@ -437,6 +440,23 @@
           </div>
         </section>
 
+        <!-- Disks & partitions -->
+        <section class="view" id="view-disks">
+          <header class="view-head">
+            <div>
+              <h1>Disks &amp; partitions</h1>
+              <p class="subtitle" id="disks-subtitle">Every disk and how it's carved up.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="disks-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="disks-banner"></div>
+          <div id="disks-body">
+            <div class="empty">Reading disks…</div>
+          </div>
+        </section>
+
         <!-- Toolbox -->
         <section class="view" id="view-toolbox">
           <header class="view-head">
@@ -730,6 +750,18 @@
     </div>
 
     <div class="toast-stack" id="toasts"></div>
+
+    <div class="modal-backdrop" id="prompt-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 id="prompt-title"></h2>
+        <label class="acct-field"><span id="prompt-label"></span><input id="prompt-input" type="text" autocomplete="off" spellcheck="false" /></label>
+        <div class="acct-hint" id="prompt-hint"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="prompt-cancel">Cancel</button>
+          <button class="btn btn-primary" id="prompt-confirm">OK</button>
+        </div>
+      </div>
+    </div>
 
     <div class="modal-backdrop" id="account-modal" hidden>
       <div class="modal" role="dialog" aria-modal="true">
