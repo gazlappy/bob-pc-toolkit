@@ -123,8 +123,13 @@ nav::-webkit-scrollbar-thumb {
 }
 
 .nav-item.is-active {
-  background: var(--bg-raised);
-  color: var(--text);
+  background: var(--accent-dim);
+  color: #fff;
+  font-weight: 600;
+}
+
+.nav-item.is-active .nav-count {
+  color: #cdddf5;
 }
 
 .nav-dot {
