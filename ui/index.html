@@ -56,6 +56,10 @@
           <button class="nav-item" data-view="disks">
             <span class="nav-dot"></span>Disks &amp; partitions
           </button>
+          <button class="nav-item" data-view="ghosts">
+            <span class="nav-dot"></span>Ghost devices
+            <span class="nav-count" id="nav-ghosts-count"></span>
+          </button>
           <button class="nav-item" data-view="monitor">
             <span class="nav-dot"></span>Performance
           </button>
@@ -440,6 +444,25 @@
           <div id="autoruns-summary"></div>
           <div id="autoruns-body">
             <div class="empty">Auditing autostart locations…</div>
+          </div>
+        </section>
+
+        <!-- Ghost devices -->
+        <section class="view" id="view-ghosts">
+          <header class="view-head">
+            <div>
+              <h1>Ghost devices</h1>
+              <p class="subtitle" id="ghosts-subtitle">Leftovers from hardware that's no longer here.</p>
+            </div>
+            <div class="head-actions">
+              <label class="toggle-inline"><input type="checkbox" id="ghosts-all" /> Select all</label>
+              <button class="btn btn-primary" id="ghosts-remove" disabled>Remove selected</button>
+              <button class="btn btn-ghost" id="ghosts-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="ghosts-banner"></div>
+          <div id="ghosts-body">
+            <div class="empty">Looking for non-present devices…</div>
           </div>
         </section>
 

@@ -2333,3 +2333,21 @@ select:focus {
   font-variant-numeric: tabular-nums;
   user-select: text;
 }
+
+/* Ghost devices ------------------------------------------------------------ */
+
+.ghost-row {
+  cursor: pointer;
+}
+
+.ghost-cb {
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+
+.ghost-row .row-meta {
+  font-size: 11px;
+  color: var(--faint);
+}

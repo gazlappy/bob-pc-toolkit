@@ -30,6 +30,7 @@ const accounts = require('./src/accounts');
 const quickcmd = require('./src/quickcmd');
 const partition = require('./src/partition');
 const wifi = require('./src/wifi');
+const ghostdevices = require('./src/ghostdevices');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -146,6 +147,8 @@ handle('partition:read', () => partition.read());
 handle('partition:setLetter', (disk, part, letter) => partition.setLetter(disk, part, letter));
 handle('partition:setLabel', (disk, part, label) => partition.setLabel(disk, part, label));
 handle('wifi:list', () => wifi.list());
+handle('ghost:list', () => ghostdevices.list());
+handle('ghost:remove', (ids) => ghostdevices.remove(ids));
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

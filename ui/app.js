@@ -28,6 +28,7 @@ const state = {
   toolbox: { data: null, loaded: false, search: '', running: null },
   disks: { data: null, loaded: false },
   wifi: { data: null, loaded: false, search: '', revealed: new Set() },
+  ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -137,6 +138,7 @@ function show(view) {
   if (view === 'toolbox' && !state.toolbox.loaded) loadToolbox();
   if (view === 'disks' && !state.disks.loaded) loadDisks();
   if (view === 'wifi' && !state.wifi.loaded) loadWifi();
+  if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
   if (view === 'backups') loadBackups();
 }
 
@@ -3266,6 +3268,163 @@ $('wifi-refresh').addEventListener('click', loadWifi);
 $('wifi-search').addEventListener('input', (event) => {
   state.wifi.search = event.target.value;
   if (state.wifi.data) renderWifi();
+});
+
+/* Ghost devices ------------------------------------------------------------ */
+
+function updateGhostRemoveButton() {
+  const btn = $('ghosts-remove');
+  const n = state.ghosts.selected.size;
+  btn.disabled = !state.admin || n === 0 || state.ghosts.busy;
+  btn.textContent = state.ghosts.busy ? 'Removing…' : n ? `Remove selected (${n})` : 'Remove selected';
+  btn.title = !state.admin ? 'Restart as administrator to remove devices.' : '';
+}
+
+function ghostRow(dev) {
+  const row = document.createElement('label');
+  row.className = 'row ghost-row';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'ghost-cb';
+  cb.checked = state.ghosts.selected.has(dev.instanceId);
+  cb.disabled = !state.admin;
+  cb.addEventListener('change', () => {
+    if (cb.checked) state.ghosts.selected.add(dev.instanceId);
+    else state.ghosts.selected.delete(dev.instanceId);
+    updateGhostRemoveButton();
+    syncGhostAllCheckbox();
+  });
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = dev.name;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = dev.instanceId;
+  main.append(name, meta);
+  row.append(cb, main);
+  return row;
+}
+
+function syncGhostAllCheckbox() {
+  const data = state.ghosts.data;
+  if (!data) return;
+  const all = data.total > 0 && state.ghosts.selected.size === data.total;
+  $('ghosts-all').checked = all;
+}
+
+function renderGhosts() {
+  const body = $('ghosts-body');
+  const banner = $('ghosts-banner');
+  banner.replaceChildren();
+  if (!state.admin) {
+    const b = document.createElement('div');
+    b.className = 'ar-summary is-warn';
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = 'Read-only — not running as administrator';
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = 'You can see the ghost devices, but removing them needs admin.';
+    b.append(lead, sub);
+    banner.append(b);
+  }
+  updateGhostRemoveButton();
+
+  const data = state.ghosts.data;
+  if (!data) {
+    body.replaceChildren(empty('Looking for non-present devices…'));
+    return;
+  }
+  if (!data.total) {
+    body.replaceChildren(empty('No ghost devices — nothing left behind.'));
+    $('ghosts-subtitle').textContent = 'Nothing to clean up.';
+    return;
+  }
+
+  body.replaceChildren();
+  for (const group of data.groups) {
+    const box = document.createElement('div');
+    box.className = 'dev-group';
+    const open = state.ghosts.openGroups.has(group.label);
+    if (open) box.classList.add('open');
+    const head = document.createElement('div');
+    head.className = 'dev-group-head';
+    const chev = document.createElement('span');
+    chev.className = 'chev';
+    chev.textContent = '▶';
+    const cls = document.createElement('span');
+    cls.className = 'cls';
+    cls.textContent = group.label;
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = `${group.items.length}`;
+    head.append(chev, cls, cnt);
+    const wrap = document.createElement('div');
+    wrap.hidden = !open;
+    for (const dev of group.items) wrap.append(ghostRow(dev));
+    head.addEventListener('click', () => {
+      const nowOpen = !box.classList.contains('open');
+      box.classList.toggle('open', nowOpen);
+      wrap.hidden = !nowOpen;
+      if (nowOpen) state.ghosts.openGroups.add(group.label);
+      else state.ghosts.openGroups.delete(group.label);
+    });
+    box.append(head, wrap);
+    body.append(box);
+  }
+
+  $('ghosts-subtitle').textContent = `${data.total} non-present device${data.total === 1 ? '' : 's'} across ${data.groups.length} categor${data.groups.length === 1 ? 'y' : 'ies'}`;
+  $('nav-ghosts-count').textContent = data.total ? String(data.total) : '';
+  syncGhostAllCheckbox();
+}
+
+async function loadGhosts() {
+  state.ghosts.loaded = false;
+  state.ghosts.selected = new Set();
+  renderGhosts();
+  try {
+    state.ghosts.data = await window.pc.ghosts.list();
+    state.ghosts.loaded = true;
+    renderGhosts();
+  } catch (error) {
+    state.ghosts.loaded = true;
+    $('ghosts-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('ghosts-refresh').addEventListener('click', loadGhosts);
+$('ghosts-all').addEventListener('change', (event) => {
+  const data = state.ghosts.data;
+  if (!data) return;
+  state.ghosts.selected = new Set();
+  if (event.target.checked) for (const g of data.groups) for (const d of g.items) state.ghosts.selected.add(d.instanceId);
+  renderGhosts();
+});
+$('ghosts-remove').addEventListener('click', async () => {
+  const ids = [...state.ghosts.selected];
+  if (!ids.length) return;
+  const ok = await confirmAction({
+    title: `Remove ${ids.length} ghost device${ids.length === 1 ? '' : 's'}?`,
+    body: 'These devices are not connected. Removing their leftover entries is safe — if a device is plugged back in, Windows re-detects it. Present hardware is never touched.',
+    confirmLabel: 'Remove',
+    danger: false,
+  });
+  if (!ok) return;
+  state.ghosts.busy = true;
+  updateGhostRemoveButton();
+  try {
+    const result = await window.pc.ghosts.remove(ids);
+    const failMsg = result.failed && result.failed.length ? ` ${result.failed.length} skipped.` : '';
+    toast(`Removed ${result.removed} device${result.removed === 1 ? '' : 's'}.${failMsg}`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.ghosts.busy = false;
+    loadGhosts();
+  }
 });
 
 /* Event log ---------------------------------------------------------------- */

@@ -121,6 +121,18 @@ Windows. The export is `Export-WindowsDriver`, which writes one tidy subfolder
 per package into a folder you pick; that is a DISM online operation, so the button
 is disabled until the app is running as administrator.
 
+**Ghost devices** — the non-present "phantom" devices hidden in Device Manager
+that pile up as hardware is swapped: old USB sticks, headsets, controllers,
+replaced network cards, leftover COM ports. They quietly cause driver conflicts
+and duplicate COM assignments. This is the classic
+`set devmgr_show_nonpresent_devices` + "show hidden devices" trick as a safe
+one-click: it lists them grouped by category with a checkbox each, and removing
+needs admin. The scope is deliberately narrow — only non-present devices in
+removable-hardware classes (USB, network, ports, disks, Bluetooth, HID…), never
+the core system/processor/firmware nodes that also report non-present — and every
+removal is re-checked server-side (still non-present, still a safe class) before
+it runs, so present hardware is never touched.
+
 **Disks & partitions** — a Disk-Management-style view of every physical disk: its
 model, bus, style (MBR/GPT) and health, a proportional bar of how it is carved
 up, and each partition's letter, label, filesystem and how full it is. The two
@@ -351,6 +363,7 @@ src/accounts.js local users: create, reset password, enable, promote, delete
 src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance actions
 src/partition.js disk/partition viewer + reversible drive-letter/label edits
 src/wifi.js     saved Wi-Fi network passwords (own machine, via netsh)
+src/ghostdevices.js non-present device cleaner (safe classes only, guarded)
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

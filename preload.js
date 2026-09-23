@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('pc', {
   connections: () => call('connections:read'),
   wifi: () => call('wifi:list'),
 
+  ghosts: {
+    list: () => call('ghost:list'),
+    remove: (ids) => call('ghost:remove', ids),
+  },
+
   accounts: {
     list: () => call('accounts:list'),
     create: (opts) => call('accounts:create', opts),
