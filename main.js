@@ -60,6 +60,12 @@ function createWindow() {
     },
   });
 
+  // The Hardware test bench needs the camera and microphone; grant media to our
+  // own local page (and nothing else).
+  const allowMedia = (permission) => permission === 'media';
+  win.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(allowMedia(permission)));
+  win.webContents.session.setPermissionCheckHandler((_wc, permission) => allowMedia(permission));
+
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {

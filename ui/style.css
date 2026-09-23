@@ -2351,3 +2351,133 @@ select:focus {
   font-size: 11px;
   color: var(--faint);
 }
+
+/* Hardware test bench ------------------------------------------------------ */
+
+.hw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.hw-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 16px;
+}
+
+.hw-card.hw-wide {
+  grid-column: 1 / -1;
+}
+
+.hw-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.hw-kbcount {
+  color: var(--good);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.hw-desc {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 12px;
+}
+
+.hw-btnrow {
+  display: flex;
+  gap: 8px;
+}
+
+.hw-meter {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.hw-meter-fill {
+  height: 100%;
+  width: 0;
+  background: var(--good);
+  transition: width 0.05s linear;
+}
+
+.hw-cam {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  border-radius: 8px;
+  margin-top: 12px;
+  background: #000;
+}
+
+.hw-kb {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.hw-kb-row {
+  display: flex;
+  gap: 5px;
+}
+
+.hw-key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+.hw-key.tested {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.hw-key.down {
+  background: var(--good);
+  color: #08120b;
+  border-color: var(--good);
+}
+
+.hw-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  cursor: pointer;
+}
+
+.hw-screen-hint {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .hw-grid {
+    grid-template-columns: 1fr;
+  }
+}

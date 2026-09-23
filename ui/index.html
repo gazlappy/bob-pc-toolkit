@@ -69,6 +69,9 @@
           <button class="nav-item" data-view="battery">
             <span class="nav-dot"></span>Battery
           </button>
+          <button class="nav-item" data-view="hwtest">
+            <span class="nav-dot"></span>Hardware test
+          </button>
           <button class="nav-item" data-view="drivers">
             <span class="nav-dot"></span>Driver export
           </button>
@@ -591,6 +594,57 @@
             <div class="empty">Reading installed drivers…</div>
           </div>
         </section>
+
+        <!-- Hardware test bench -->
+        <section class="view" id="view-hwtest">
+          <header class="view-head">
+            <div>
+              <h1>Hardware test</h1>
+              <p class="subtitle">Check the physical bits before handover — screen, keyboard, sound and camera.</p>
+            </div>
+          </header>
+          <div class="hw-grid">
+            <div class="hw-card">
+              <div class="hw-title">Screen</div>
+              <div class="hw-desc">Full-screen colour cycle to spot dead or stuck pixels and backlight bleed. Click or press Space to change colour, Esc to exit.</div>
+              <button class="btn btn-primary" id="hw-screen-start">Start full-screen test</button>
+            </div>
+
+            <div class="hw-card">
+              <div class="hw-title">Speakers</div>
+              <div class="hw-desc">Play a test tone through each channel to check the speakers and stereo wiring.</div>
+              <div class="hw-btnrow">
+                <button class="btn btn-ghost" data-tone="left">Left</button>
+                <button class="btn btn-ghost" data-tone="both">Both</button>
+                <button class="btn btn-ghost" data-tone="right">Right</button>
+              </div>
+            </div>
+
+            <div class="hw-card">
+              <div class="hw-title">Microphone</div>
+              <div class="hw-desc">Speak and watch the level move to confirm the mic is picking up sound.</div>
+              <button class="btn btn-primary" id="hw-mic-toggle">Start microphone</button>
+              <div class="hw-meter" id="hw-mic-meter" hidden><div class="hw-meter-fill" id="hw-mic-fill"></div></div>
+            </div>
+
+            <div class="hw-card">
+              <div class="hw-title">Webcam</div>
+              <div class="hw-desc">Live preview to confirm the camera works.</div>
+              <button class="btn btn-primary" id="hw-cam-toggle">Start webcam</button>
+              <video class="hw-cam" id="hw-cam" autoplay playsinline muted hidden></video>
+            </div>
+
+            <div class="hw-card hw-wide">
+              <div class="hw-title">Keyboard <span class="hw-kbcount" id="hw-kb-count"></span></div>
+              <div class="hw-desc">Press every key — each lights up when it registers. A key that stays lit without being held is stuck. <button class="btn btn-ghost btn-small" id="hw-kb-reset">Reset</button></div>
+              <div class="hw-kb" id="hw-kb"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="hw-screen" id="hw-screen-overlay" hidden>
+          <div class="hw-screen-hint" id="hw-screen-hint">Click / Space: next colour · Esc: exit</div>
+        </div>
 
         <!-- Battery health -->
         <section class="view" id="view-battery">

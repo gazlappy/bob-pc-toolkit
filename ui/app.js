@@ -30,6 +30,7 @@ const state = {
   wifi: { data: null, loaded: false, search: '', revealed: new Set() },
   ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
   report: { data: null, loaded: false },
+  hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -141,6 +142,8 @@ function show(view) {
   if (view === 'wifi' && !state.wifi.loaded) loadWifi();
   if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
   if (view === 'report' && !state.report.loaded) loadReport();
+  if (view === 'hwtest') initHwtest();
+  else stopHwtest();
   if (view === 'backups') loadBackups();
 }
 
@@ -3556,6 +3559,214 @@ $('report-open').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Hardware test bench ------------------------------------------------------ */
+
+const KB_LAYOUT = [
+  [['Escape', 'Esc'], ['F1', 'F1'], ['F2', 'F2'], ['F3', 'F3'], ['F4', 'F4'], ['F5', 'F5'], ['F6', 'F6'], ['F7', 'F7'], ['F8', 'F8'], ['F9', 'F9'], ['F10', 'F10'], ['F11', 'F11'], ['F12', 'F12']],
+  [['Backquote', '`'], ['Digit1', '1'], ['Digit2', '2'], ['Digit3', '3'], ['Digit4', '4'], ['Digit5', '5'], ['Digit6', '6'], ['Digit7', '7'], ['Digit8', '8'], ['Digit9', '9'], ['Digit0', '0'], ['Minus', '-'], ['Equal', '='], ['Backspace', '⌫', 2]],
+  [['Tab', 'Tab', 1.5], ['KeyQ', 'Q'], ['KeyW', 'W'], ['KeyE', 'E'], ['KeyR', 'R'], ['KeyT', 'T'], ['KeyY', 'Y'], ['KeyU', 'U'], ['KeyI', 'I'], ['KeyO', 'O'], ['KeyP', 'P'], ['BracketLeft', '['], ['BracketRight', ']'], ['Backslash', '\\', 1.5]],
+  [['CapsLock', 'Caps', 1.8], ['KeyA', 'A'], ['KeyS', 'S'], ['KeyD', 'D'], ['KeyF', 'F'], ['KeyG', 'G'], ['KeyH', 'H'], ['KeyJ', 'J'], ['KeyK', 'K'], ['KeyL', 'L'], ['Semicolon', ';'], ['Quote', "'"], ['Enter', 'Enter', 2.2]],
+  [['ShiftLeft', 'Shift', 2.3], ['KeyZ', 'Z'], ['KeyX', 'X'], ['KeyC', 'C'], ['KeyV', 'V'], ['KeyB', 'B'], ['KeyN', 'N'], ['KeyM', 'M'], ['Comma', ','], ['Period', '.'], ['Slash', '/'], ['ShiftRight', 'Shift', 2.7]],
+  [['ControlLeft', 'Ctrl', 1.4], ['MetaLeft', 'Win', 1.2], ['AltLeft', 'Alt', 1.2], ['Space', 'Space', 6], ['AltRight', 'Alt', 1.2], ['ControlRight', 'Ctrl', 1.4], ['ArrowLeft', '←'], ['ArrowUp', '↑'], ['ArrowDown', '↓'], ['ArrowRight', '→']],
+];
+
+const hwKbTested = new Set();
+
+function buildKeyboard() {
+  const kb = $('hw-kb');
+  kb.replaceChildren();
+  for (const rowDef of KB_LAYOUT) {
+    const row = document.createElement('div');
+    row.className = 'hw-kb-row';
+    for (const [code, label, width] of rowDef) {
+      const key = document.createElement('div');
+      key.className = 'hw-key';
+      key.dataset.code = code;
+      key.textContent = label;
+      if (width) key.style.flexGrow = String(width);
+      row.append(key);
+    }
+    kb.append(row);
+  }
+  updateKbCount();
+}
+
+function updateKbCount() {
+  $('hw-kb-count').textContent = hwKbTested.size ? `· ${hwKbTested.size} keys OK` : '';
+}
+
+function hwKeyDown(e) {
+  const el = document.querySelector(`.hw-key[data-code="${CSS.escape(e.code)}"]`);
+  if (el) {
+    el.classList.add('down', 'tested');
+    hwKbTested.add(e.code);
+    updateKbCount();
+  }
+  // Swallow keys that would otherwise act (Tab/Space/arrows/F-keys) while testing.
+  if (document.getElementById('view-hwtest').classList.contains('is-active')) e.preventDefault();
+}
+
+function hwKeyUp(e) {
+  const el = document.querySelector(`.hw-key[data-code="${CSS.escape(e.code)}"]`);
+  if (el) el.classList.remove('down');
+}
+
+// --- Screen test ---
+const HW_COLORS = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#7f7f7f', '#ffff00', '#00ffff', '#ff00ff'];
+let hwColorIdx = 0;
+
+function hwScreenNext() {
+  hwColorIdx = (hwColorIdx + 1) % HW_COLORS.length;
+  $('hw-screen-overlay').style.background = HW_COLORS[hwColorIdx];
+}
+
+function hwScreenExit() {
+  const ov = $('hw-screen-overlay');
+  ov.hidden = true;
+  ov.removeEventListener('click', hwScreenNext);
+  document.removeEventListener('keydown', hwScreenKey, true);
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+function hwScreenKey(e) {
+  if (e.key === 'Escape') { hwScreenExit(); e.preventDefault(); }
+  else if (e.key === ' ' || e.key === 'ArrowRight' || e.key === 'Enter') { hwScreenNext(); e.preventDefault(); }
+}
+
+function hwScreenStart() {
+  hwColorIdx = 0;
+  const ov = $('hw-screen-overlay');
+  ov.hidden = false;
+  ov.style.background = HW_COLORS[0];
+  ov.addEventListener('click', hwScreenNext);
+  document.addEventListener('keydown', hwScreenKey, true);
+  ov.requestFullscreen().catch(() => {}); // covering overlay works even if this is refused
+}
+
+// --- Speakers ---
+function hwTone(channel) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+    osc.type = 'sine';
+    osc.frequency.value = 660;
+    gain.gain.value = 0.12;
+    panner.pan.value = channel === 'left' ? -1 : channel === 'right' ? 1 : 0;
+    osc.connect(gain).connect(panner).connect(ctx.destination);
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close().catch(() => {}); }, 700);
+  } catch (e) {
+    toast('Could not play a tone on this machine.', 'error');
+  }
+}
+
+// --- Microphone ---
+async function hwMicToggle() {
+  const btn = $('hw-mic-toggle');
+  if (state.hwtest.micStream) {
+    hwMicStop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.hwtest.micStream = stream;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    state.hwtest.audioCtx = ctx;
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const buf = new Uint8Array(analyser.fftSize);
+    $('hw-mic-meter').hidden = false;
+    btn.textContent = 'Stop microphone';
+    const tick = () => {
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+      const rms = Math.sqrt(sum / buf.length);
+      $('hw-mic-fill').style.width = `${Math.min(100, Math.round(rms * 320))}%`;
+      state.hwtest.micRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) {
+    toast('Could not open the microphone (no mic, or permission denied).', 'error');
+  }
+}
+
+function hwMicStop() {
+  if (state.hwtest.micRaf) cancelAnimationFrame(state.hwtest.micRaf);
+  state.hwtest.micRaf = null;
+  if (state.hwtest.audioCtx) { state.hwtest.audioCtx.close().catch(() => {}); state.hwtest.audioCtx = null; }
+  if (state.hwtest.micStream) { state.hwtest.micStream.getTracks().forEach((t) => t.stop()); state.hwtest.micStream = null; }
+  const meter = $('hw-mic-meter');
+  if (meter) meter.hidden = true;
+  const btn = $('hw-mic-toggle');
+  if (btn) btn.textContent = 'Start microphone';
+}
+
+// --- Webcam ---
+async function hwCamToggle() {
+  const btn = $('hw-cam-toggle');
+  const video = $('hw-cam');
+  if (state.hwtest.camStream) {
+    hwCamStop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    state.hwtest.camStream = stream;
+    video.srcObject = stream;
+    video.hidden = false;
+    btn.textContent = 'Stop webcam';
+  } catch (e) {
+    toast('Could not open the webcam (no camera, or permission denied).', 'error');
+  }
+}
+
+function hwCamStop() {
+  const video = $('hw-cam');
+  if (state.hwtest.camStream) { state.hwtest.camStream.getTracks().forEach((t) => t.stop()); state.hwtest.camStream = null; }
+  if (video) { video.srcObject = null; video.hidden = true; }
+  const btn = $('hw-cam-toggle');
+  if (btn) btn.textContent = 'Start webcam';
+}
+
+function initHwtest() {
+  if (!state.hwtest.built) {
+    buildKeyboard();
+    $('hw-screen-start').addEventListener('click', hwScreenStart);
+    $('hw-kb-reset').addEventListener('click', () => {
+      hwKbTested.clear();
+      for (const k of document.querySelectorAll('.hw-key')) k.classList.remove('tested', 'down');
+      updateKbCount();
+    });
+    $('hw-mic-toggle').addEventListener('click', hwMicToggle);
+    $('hw-cam-toggle').addEventListener('click', hwCamToggle);
+    for (const b of document.querySelectorAll('#view-hwtest [data-tone]')) {
+      b.addEventListener('click', () => hwTone(b.dataset.tone));
+    }
+    state.hwtest.built = true;
+  }
+  if (!state.hwtest.kbBound) {
+    document.addEventListener('keydown', hwKeyDown, true);
+    document.addEventListener('keyup', hwKeyUp, true);
+    state.hwtest.kbBound = true;
+  }
+}
+
+// Releases the camera, mic and key listeners the moment the tab is left.
+function stopHwtest() {
+  if (state.hwtest.kbBound) {
+    document.removeEventListener('keydown', hwKeyDown, true);
+    document.removeEventListener('keyup', hwKeyUp, true);
+    state.hwtest.kbBound = false;
+  }
+  hwMicStop();
+  hwCamStop();
+}
 
 $('ghosts-remove').addEventListener('click', async () => {
   const ids = [...state.ghosts.selected];

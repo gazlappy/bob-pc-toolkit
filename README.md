@@ -121,6 +121,14 @@ Windows. The export is `Export-WindowsDriver`, which writes one tidy subfolder
 per package into a folder you pick; that is a DISM online operation, so the button
 is disabled until the app is running as administrator.
 
+**Hardware test** — for checking a used or just-repaired machine before handover.
+A full-screen colour cycler for dead/stuck pixels and backlight bleed; a live
+keyboard tester where every key lights up as it registers (a key that stays lit
+is stuck), with a count of keys proven working; left/both/right speaker tones to
+check the channels; a live microphone level meter; and a webcam preview. It runs
+in the app itself — the camera and microphone are granted only to this local page
+— and the camera, mic and key listeners are released the moment you leave the tab.
+
 **Health report** — one click bundles what the other tabs read — the spec sheet,
 drive health, recent stability, security posture and battery wear — into a single
 printable, light-themed HTML report to hand the customer or keep on file. The tab
