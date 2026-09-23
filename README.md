@@ -121,6 +121,13 @@ Windows. The export is `Export-WindowsDriver`, which writes one tidy subfolder
 per package into a folder you pick; that is a DISM online operation, so the button
 is disabled until the app is running as administrator.
 
+**Health report** — one click bundles what the other tabs read — the spec sheet,
+drive health, recent stability, security posture and battery wear — into a single
+printable, light-themed HTML report to hand the customer or keep on file. The tab
+previews it in the app; "Save as HTML…" writes it wherever you choose and "Open in
+browser" renders it for printing. Read-only snapshot, no free tool gives you the
+same leave-behind.
+
 **Ghost devices** — the non-present "phantom" devices hidden in Device Manager
 that pile up as hardware is swapped: old USB sticks, headsets, controllers,
 replaced network cards, leftover COM ports. They quietly cause driver conflicts
@@ -364,6 +371,7 @@ src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance acti
 src/partition.js disk/partition viewer + reversible drive-letter/label edits
 src/wifi.js     saved Wi-Fi network passwords (own machine, via netsh)
 src/ghostdevices.js non-present device cleaner (safe classes only, guarded)
+src/report.js   printable HTML health report bundling the other modules
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

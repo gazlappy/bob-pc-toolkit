@@ -29,6 +29,7 @@ const state = {
   disks: { data: null, loaded: false },
   wifi: { data: null, loaded: false, search: '', revealed: new Set() },
   ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
+  report: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -139,6 +140,7 @@ function show(view) {
   if (view === 'disks' && !state.disks.loaded) loadDisks();
   if (view === 'wifi' && !state.wifi.loaded) loadWifi();
   if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
+  if (view === 'report' && !state.report.loaded) loadReport();
   if (view === 'backups') loadBackups();
 }
 
@@ -3403,6 +3405,158 @@ $('ghosts-all').addEventListener('change', (event) => {
   if (event.target.checked) for (const g of data.groups) for (const d of g.items) state.ghosts.selected.add(d.instanceId);
   renderGhosts();
 });
+/* Health report ------------------------------------------------------------ */
+
+function reportKv(pairs) {
+  const list = document.createElement('div');
+  list.className = 'sec-list';
+  for (const [k, v] of pairs) {
+    if (v == null || v === '') continue;
+    const rowEl = document.createElement('div');
+    rowEl.className = 'sec-check';
+    const main = document.createElement('div');
+    main.className = 'sec-main';
+    const label = document.createElement('div');
+    label.className = 'sec-label';
+    label.textContent = k;
+    main.append(label);
+    const val = document.createElement('div');
+    val.className = 'sec-value';
+    val.textContent = v;
+    rowEl.append(main, val);
+    list.append(rowEl);
+  }
+  return list;
+}
+
+function reportGib(bytes) {
+  const n = Number(bytes) || 0;
+  if (n <= 0) return '—';
+  const gb = n / 1e9;
+  return gb >= 1000 ? `${(gb / 1000).toFixed(2)} TB` : `${Math.round(gb)} GB`;
+}
+
+function renderReport() {
+  const body = $('report-body');
+  const data = state.report.data;
+  const ready = Boolean(data);
+  $('report-save').disabled = !ready;
+  $('report-open').disabled = !ready;
+  if (!ready) {
+    body.replaceChildren(empty('Gathering the machine’s details…'));
+    return;
+  }
+
+  body.replaceChildren();
+  const sys = data.sys || {};
+  const os = sys.os || {};
+  const machine = sys.machine || {};
+  const cpu = sys.cpu || {};
+  const mem = sys.memory || {};
+  const act = sys.activation || {};
+  const sec = data.security || {};
+
+  // Overall badge
+  const summary = sec.summary || {};
+  const tone = summary.bad ? 'is-bad' : summary.warn ? 'is-warn' : 'is-good';
+  const card = document.createElement('div');
+  card.className = `sec-summary ${tone}`;
+  const lead = document.createElement('div');
+  lead.className = 'sec-summary-lead';
+  lead.textContent = summary.bad ? 'Needs attention' : summary.warn ? 'A few things to check' : 'Healthy';
+  const sub = document.createElement('div');
+  sub.className = 'sec-summary-sub';
+  sub.textContent = `${os.caption || 'Windows'} · ${machine.model || machine.manufacturer || 'PC'} · report snapshot`;
+  card.append(lead, sub);
+  body.append(card);
+
+  const addTitle = (t) => {
+    const el = document.createElement('div');
+    el.className = 'group-title';
+    el.textContent = t;
+    body.append(el);
+  };
+
+  addTitle('System');
+  body.append(
+    reportKv([
+      ['Windows', `${os.caption || ''}${os.build ? ` (build ${os.build})` : ''}`],
+      ['Activation', act.status ? `${act.status}${act.partialKey ? ` · …${act.partialKey}` : ''}` : ''],
+      ['Make / model', [machine.manufacturer, machine.model].filter(Boolean).join(' · ')],
+      ['Processor', cpu.name],
+      ['Memory', reportGib(mem.total) + (mem.slotsUsed ? ` · ${mem.slotsUsed}/${mem.slotsTotal} slots` : '')],
+    ])
+  );
+
+  const disks = sys.disks || [];
+  if (disks.length) {
+    addTitle('Storage health');
+    body.append(reportKv(disks.map((d) => [`${d.name} (${d.media || '?'})`, `${reportGib(d.size)} · ${d.health || 'Unknown'}`])));
+  }
+
+  const ev = (data.events && data.events.summary) || null;
+  if (ev) {
+    addTitle('Stability');
+    body.append(
+      reportKv([
+        ['Blue screens (45 days)', String(ev.bsod ?? 0)],
+        ['Crashes / app crashes', `${ev.crash ?? 0} / ${ev.appcrash ?? 0}`],
+        [`Errors (last ${ev.days || 14} days)`, String(ev.errors ?? 0)],
+      ])
+    );
+  }
+
+  if (sec.sections) {
+    addTitle('Security');
+    for (const section of sec.sections) {
+      const list = document.createElement('div');
+      list.className = 'sec-list';
+      for (const c of section.checks) list.append(securityCheckRow(c));
+      body.append(list);
+    }
+  }
+
+  const bat = data.battery;
+  if (bat && bat.present) {
+    addTitle('Battery');
+    body.append(reportKv([['Health', bat.wearPct != null ? `${100 - bat.wearPct}% of original (${bat.wearPct}% worn)` : 'not reported'], ['Cycles', String(bat.cycleCount || '—')]]));
+  }
+
+  $('report-subtitle').textContent = `Snapshot of ${os.computerName || sys.hostname || 'this PC'} · ready to save or print`;
+}
+
+async function loadReport() {
+  state.report.loaded = false;
+  renderReport();
+  try {
+    state.report.data = await window.pc.report.gather();
+    state.report.loaded = true;
+    renderReport();
+  } catch (error) {
+    state.report.loaded = true;
+    $('report-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('report-save').addEventListener('click', async () => {
+  try {
+    const r = await window.pc.report.save();
+    if (r && r.canceled) return;
+    toast(`Report saved to ${r.path}`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+$('report-open').addEventListener('click', async () => {
+  try {
+    await window.pc.report.open();
+    toast('Report opened in your browser.', 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
 $('ghosts-remove').addEventListener('click', async () => {
   const ids = [...state.ghosts.selected];
   if (!ids.length) return;

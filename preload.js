@@ -70,6 +70,12 @@ contextBridge.exposeInMainWorld('pc', {
     remove: (ids) => call('ghost:remove', ids),
   },
 
+  report: {
+    gather: () => call('report:gather'),
+    save: () => call('report:save'),
+    open: () => call('report:open'),
+  },
+
   accounts: {
     list: () => call('accounts:list'),
     create: (opts) => call('accounts:create', opts),

@@ -1,6 +1,8 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { app, BrowserWindow, ipcMain, shell, clipboard, dialog } = require('electron');
 
 const ps = require('./src/ps');
@@ -31,6 +33,7 @@ const quickcmd = require('./src/quickcmd');
 const partition = require('./src/partition');
 const wifi = require('./src/wifi');
 const ghostdevices = require('./src/ghostdevices');
+const report = require('./src/report');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -149,6 +152,27 @@ handle('partition:setLabel', (disk, part, label) => partition.setLabel(disk, par
 handle('wifi:list', () => wifi.list());
 handle('ghost:list', () => ghostdevices.list());
 handle('ghost:remove', (ids) => ghostdevices.remove(ids));
+handle('report:gather', () => report.gather());
+handle('report:save', async () => {
+  const html = report.buildHtml(report.latest() || (await report.gather()));
+  const win = BrowserWindow.getAllWindows()[0];
+  const stamp = new Date().toISOString().slice(0, 10);
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Save PC health report',
+    defaultPath: path.join(os.homedir(), 'Desktop', `PC Health Report ${stamp}.html`),
+    filters: [{ name: 'Web page', extensions: ['html'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  fs.writeFileSync(result.filePath, html, 'utf8');
+  return { canceled: false, path: result.filePath };
+});
+handle('report:open', async () => {
+  const html = report.buildHtml(report.latest() || (await report.gather()));
+  const file = path.join(os.tmpdir(), `pc-cleanup-report-${Date.now()}.html`);
+  fs.writeFileSync(file, html, 'utf8');
+  await shell.openPath(file);
+  return { path: file };
+});
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

@@ -49,6 +49,9 @@
           <button class="nav-item" data-view="system">
             <span class="nav-dot"></span>System info
           </button>
+          <button class="nav-item" data-view="report">
+            <span class="nav-dot"></span>Health report
+          </button>
           <button class="nav-item" data-view="devices">
             <span class="nav-dot"></span>Devices
             <span class="nav-count" id="nav-devices-count"></span>
@@ -444,6 +447,23 @@
           <div id="autoruns-summary"></div>
           <div id="autoruns-body">
             <div class="empty">Auditing autostart locations…</div>
+          </div>
+        </section>
+
+        <!-- Health report -->
+        <section class="view" id="view-report">
+          <header class="view-head">
+            <div>
+              <h1>Health report</h1>
+              <p class="subtitle" id="report-subtitle">A one-page summary to hand the customer or keep on file.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="report-open" disabled>Open in browser</button>
+              <button class="btn btn-primary" id="report-save" disabled>Save as HTML…</button>
+            </div>
+          </header>
+          <div id="report-body">
+            <div class="empty">Gathering the machine's details…</div>
           </div>
         </section>
 
