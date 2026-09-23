@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('pc', {
     setLabel: (disk, part, label) => call('partition:setLabel', disk, part, label),
   },
   connections: () => call('connections:read'),
+  wifi: () => call('wifi:list'),
 
   accounts: {
     list: () => call('accounts:list'),

@@ -27,6 +27,7 @@ const state = {
   accounts: { data: null, loaded: false },
   toolbox: { data: null, loaded: false, search: '', running: null },
   disks: { data: null, loaded: false },
+  wifi: { data: null, loaded: false, search: '', revealed: new Set() },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -135,6 +136,7 @@ function show(view) {
   if (view === 'accounts' && !state.accounts.loaded) loadAccounts();
   if (view === 'toolbox' && !state.toolbox.loaded) loadToolbox();
   if (view === 'disks' && !state.disks.loaded) loadDisks();
+  if (view === 'wifi' && !state.wifi.loaded) loadWifi();
   if (view === 'backups') loadBackups();
 }
 
@@ -3153,6 +3155,118 @@ async function loadDisks() {
 }
 
 $('disks-refresh').addEventListener('click', loadDisks);
+
+/* Wi-Fi keys --------------------------------------------------------------- */
+
+function wifiRow(p) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = p.name;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta wifi-key';
+  const revealed = state.wifi.revealed.has(p.name);
+  if (p.open) {
+    meta.textContent = 'Open network · no password';
+  } else if (!p.hasKey) {
+    meta.textContent = `${p.auth || 'Secured'} · password hidden (needs admin)`;
+  } else {
+    meta.textContent = `${p.auth || 'Secured'} · ${revealed ? p.key : '•'.repeat(Math.min(12, p.key.length || 8))}`;
+  }
+  main.append(name, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  if (p.hasKey) {
+    const show = document.createElement('button');
+    show.className = 'btn btn-ghost btn-small';
+    show.textContent = revealed ? 'Hide' : 'Show';
+    show.addEventListener('click', () => {
+      if (state.wifi.revealed.has(p.name)) state.wifi.revealed.delete(p.name);
+      else state.wifi.revealed.add(p.name);
+      renderWifi();
+    });
+    const copy = document.createElement('button');
+    copy.className = 'btn btn-ghost btn-small';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', async () => {
+      try {
+        await window.pc.copyText(p.key);
+        toast(`Copied the password for ${p.name}.`, 'good');
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+    actions.append(show, copy);
+  }
+  row.append(main, actions);
+  return row;
+}
+
+function renderWifi() {
+  const body = $('wifi-body');
+  const banner = $('wifi-banner');
+  banner.replaceChildren();
+  const data = state.wifi.data;
+  if (!data) {
+    body.replaceChildren(empty('Reading saved networks…'));
+    return;
+  }
+  if (!data.supported) {
+    body.replaceChildren(empty('No Wi-Fi adapter on this machine, or the WLAN service is off.'));
+    $('wifi-subtitle').textContent = 'No wireless on this machine.';
+    return;
+  }
+  if (data.adminNeeded) {
+    const b = document.createElement('div');
+    b.className = 'ar-summary is-warn';
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = 'Passwords hidden — not running as administrator';
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = 'The networks are listed, but Windows only reveals the saved keys to an administrator. Restart as admin to see them.';
+    b.append(lead, sub);
+    banner.append(b);
+  }
+
+  const term = state.wifi.search.trim().toLowerCase();
+  const profiles = data.profiles.filter((p) => !term || p.name.toLowerCase().includes(term));
+  body.replaceChildren();
+  if (!profiles.length) {
+    body.replaceChildren(empty(term ? 'No networks match.' : 'No saved Wi-Fi networks.'));
+  } else {
+    const list = document.createElement('div');
+    list.className = 'sec-list';
+    for (const p of profiles) list.append(wifiRow(p));
+    body.append(list);
+  }
+  $('wifi-subtitle').textContent = `${data.profiles.length} saved network${data.profiles.length === 1 ? '' : 's'} on this PC`;
+}
+
+async function loadWifi() {
+  state.wifi.loaded = false;
+  state.wifi.revealed = new Set();
+  renderWifi();
+  try {
+    state.wifi.data = await window.pc.wifi();
+    state.wifi.loaded = true;
+    renderWifi();
+  } catch (error) {
+    state.wifi.loaded = true;
+    $('wifi-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('wifi-refresh').addEventListener('click', loadWifi);
+$('wifi-search').addEventListener('input', (event) => {
+  state.wifi.search = event.target.value;
+  if (state.wifi.data) renderWifi();
+});
 
 /* Event log ---------------------------------------------------------------- */
 

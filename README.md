@@ -188,6 +188,15 @@ that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
 Signature checks run across a small runspace pool so a machine's worth of
 endpoints resolves in a few seconds rather than tens.
 
+**Wi-Fi keys** — the passwords this machine already has saved, so after a reset or
+reinstall the PC (and the customer's other kit) can get back online without
+hunting for the router sticker. Own-machine recovery, the same idea as the
+product-key tool: it only reads the WLAN profiles stored on this PC through
+Windows' own `netsh wlan`. Each key is masked with a Show and a Copy button.
+Windows keeps the key encrypted under the SYSTEM account, so where `key=clear`
+cannot decrypt it (unelevated on some configurations) the network still lists but
+the password stays hidden with a "needs admin" note.
+
 **Toolbox** — around sixty of the Windows consoles, control panels, Settings
 pages and quick fixes a tech reaches for, as one-click tiles in five groups:
 *Consoles* (Device Manager, Disk Management, Services, Event Viewer, Task
@@ -341,6 +350,7 @@ src/connections.js active TCP/UDP endpoints by process, signature-flagged
 src/accounts.js local users: create, reset password, enable, promote, delete
 src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance actions
 src/partition.js disk/partition viewer + reversible drive-letter/label edits
+src/wifi.js     saved Wi-Fi network passwords (own machine, via netsh)
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

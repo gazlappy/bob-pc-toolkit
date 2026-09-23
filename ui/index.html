@@ -74,6 +74,9 @@
           <button class="nav-item" data-view="repair">
             <span class="nav-dot"></span>Repair
           </button>
+          <button class="nav-item" data-view="wifi">
+            <span class="nav-dot"></span>Wi-Fi keys
+          </button>
           <button class="nav-item" data-view="events">
             <span class="nav-dot"></span>Event log
           </button>
@@ -437,6 +440,24 @@
           <div id="autoruns-summary"></div>
           <div id="autoruns-body">
             <div class="empty">Auditing autostart locations…</div>
+          </div>
+        </section>
+
+        <!-- Wi-Fi keys -->
+        <section class="view" id="view-wifi">
+          <header class="view-head">
+            <div>
+              <h1>Wi-Fi keys</h1>
+              <p class="subtitle" id="wifi-subtitle">Passwords for the networks this PC has saved.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="wifi-search" type="search" placeholder="Search…" />
+              <button class="btn btn-ghost" id="wifi-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="wifi-banner"></div>
+          <div id="wifi-body">
+            <div class="empty">Reading saved networks…</div>
           </div>
         </section>
 

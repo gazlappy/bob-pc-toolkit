@@ -2326,3 +2326,10 @@ select:focus {
 .part-usebar-fill.is-full {
   background: var(--warn);
 }
+
+/* Wi-Fi keys --------------------------------------------------------------- */
+
+.wifi-key {
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
