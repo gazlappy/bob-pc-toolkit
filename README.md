@@ -188,14 +188,24 @@ that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
 Signature checks run across a small runspace pool so a machine's worth of
 endpoints resolves in a few seconds rather than tens.
 
-**Toolbox** — the Windows consoles and quick fixes a tech reaches for, as buttons:
-Device Manager, Disk Management, Services, Event Viewer, Task Scheduler, Computer
-Management, Reliability and Resource Monitor; System Information, DirectX
-Diagnostic, msconfig, regedit, System Properties, classic User Accounts; the
-Programs/Network/Power/Sound control panels; and a few one-click actions (flush
-DNS, gpupdate /force, reset the Store cache, restart the Print Spooler or
-Explorer). The renderer only ever sends a tool id — the command is resolved from
-a fixed table in the main process, so nothing the UI sends can become an
+**Toolbox** — around sixty of the Windows consoles, control panels, Settings
+pages and quick fixes a tech reaches for, as one-click tiles in five groups:
+*Consoles* (Device Manager, Disk Management, Services, Event Viewer, Task
+Scheduler, Computer Management, Group Policy, Firewall, Certificates, Print
+Management, Reliability and Resource Monitor); *System tools* (Task Manager,
+System Information, winver, DirectX Diagnostic, msconfig, regedit, Command Prompt,
+PowerShell, Optimise Drives, Disk Cleanup, System Restore, Memory Diagnostic,
+Remote Desktop, Quick Assist, Snipping Tool, System Properties, User Accounts,
+Credential Manager); *Control panels* (Programs, Network, Internet Options, Power,
+Sound, Date/Time, Region, Mouse, Devices and Printers, Mobility Center, Fonts,
+Windows Features); *Settings* (Windows Update, Windows Security, Apps, Storage,
+About/Activation, Recovery, Bluetooth, Display); and *Quick actions* (flush and
+re-register DNS, gpupdate /force, create a restore point, switch to the High
+Performance power plan, reset the Store cache, restart the Print Spooler, rebuild
+the icon cache, empty the Recycle Bin, restart Explorer, and restart straight into
+UEFI/BIOS or the recovery options — the destructive and reboot ones behind a
+red confirm). The renderer only ever sends a tool id — the command is resolved
+from a fixed table in the main process, so nothing the UI sends can become an
 arbitrary command line.
 
 **Accounts** — the everyday "a customer forgot their password" and "this machine

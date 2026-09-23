@@ -2836,9 +2836,9 @@ async function runTool(tool, tile) {
   if (tool.confirm) {
     const ok = await confirmAction({
       title: `${tool.label}?`,
-      body: tool.id === 'explorer' ? 'The taskbar and desktop will briefly disappear and reload. Any open File Explorer windows will close.' : `Run ${tool.label}?`,
+      body: tool.confirmBody || `Run ${tool.label}?`,
       confirmLabel: tool.label,
-      danger: false,
+      danger: Boolean(tool.danger),
     });
     if (!ok) return;
   }
