@@ -1,4 +1,4 @@
-# PC Cleanup
+# BOB — Best Of the Best
 
 A Windows bench tool for keeping a PC in order: reclaim disk space, manage
 startup and installed programs, and diagnose or repair the machine — a spec
@@ -12,14 +12,14 @@ deletes, and writes a restore point before any registry change.
 
 ## Running it
 
-Double-click **`dist\PC Cleanup.exe`** — a single portable file, no install, no
+Double-click **`dist\BOB.exe`** — a single portable file, no install, no
 dependencies. Copy it anywhere (desktop, USB stick, another PC) and it runs.
 
 Windows SmartScreen will show *"Windows protected your PC"* the first time,
 because the executable is not code-signed. Click **More info → Run anyway**.
 Signing it would need a paid code-signing certificate.
 
-To run from source instead, double-click **`PC Cleanup.bat`**, or:
+To run from source instead, double-click **`BOB.bat`**, or:
 
 ```bash
 npm start
@@ -27,7 +27,7 @@ npm start
 
 Some locations are machine-wide (`C:\Windows\Temp`, the Windows Update cache,
 `HKLM` startup entries, scheduled tasks). To touch those, use
-**`PC Cleanup (as admin).bat`**, or press *Restart as administrator* in the
+**`BOB (as admin).bat`**, or press *Restart as administrator* in the
 bottom-left of the app. Without it, those rows are visible but read-only and
 tagged *Needs administrator*.
 
@@ -337,8 +337,10 @@ filesystem path that is definitely not there**, and:
   That is where registry cleaners break machines, for no measurable gain.
 
 Restore points live in `%APPDATA%\PC Cleanup\backups\<timestamp>\` as a plain
-`restore.reg` plus a `manifest.json`. They are ordinary registry files — you can
-double-click one in Explorer without the app.
+`restore.reg` plus a `manifest.json`. (That folder keeps the app's original name
+on purpose — the userData path is stable across the rename to BOB, so existing
+restore points and quarantined files are never orphaned.) They are ordinary
+registry files — you can double-click one in Explorer without the app.
 
 Whole keys are captured with `reg export`; single values are reconstructed as
 `hex(N)` entries so removing one value from a large shared key does not mean
@@ -554,7 +556,7 @@ the CSSOM rather than `style` attributes.
 npm run dist
 ```
 
-Output lands in `dist\PC Cleanup.exe` (~71 MB — it carries its own Chromium).
+Output lands in `dist\BOB.exe` (~71 MB — it carries its own Chromium).
 `npm run icon` regenerates `build/icon.ico` from the SVG in `tools/make-icon.js`.
 
 If the build fails with *"Cannot create symbolic link: A required privilege is

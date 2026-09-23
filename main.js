@@ -35,8 +35,10 @@ const wifi = require('./src/wifi');
 const ghostdevices = require('./src/ghostdevices');
 const report = require('./src/report');
 
-// Set before anything reads app.getPath('userData'), so restore points land in
-// "PC Cleanup" rather than the default "Electron" folder when run from source.
+// Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
+// userData folder — where restore points live — derives from this, so keeping it
+// stable across the rename to "BOB" preserves every existing backup and
+// quarantined file. It is an internal AppData folder the user never sees.
 app.setName('PC Cleanup');
 
 let win = null;
@@ -49,6 +51,10 @@ function createWindow() {
     minHeight: 640,
     show: false,
     backgroundColor: '#0e1116',
+    icon: (() => {
+      const p = path.join(__dirname, 'build', 'icon.ico');
+      return fs.existsSync(p) ? p : undefined;
+    })(),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#0e1116', symbolColor: '#8b95a5', height: 44 },
@@ -174,7 +180,7 @@ handle('report:save', async () => {
 });
 handle('report:open', async () => {
   const html = report.buildHtml(report.latest() || (await report.gather()));
-  const file = path.join(os.tmpdir(), `pc-cleanup-report-${Date.now()}.html`);
+  const file = path.join(os.tmpdir(), `bob-report-${Date.now()}.html`);
   fs.writeFileSync(file, html, 'utf8');
   await shell.openPath(file);
   return { path: file };

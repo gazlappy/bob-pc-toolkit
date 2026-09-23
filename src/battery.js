@@ -134,7 +134,7 @@ async function read() {
 
   // Fill in capacity/cycle from a battery report if the firmware left them blank.
   if (!raw.designCapacity || !raw.fullCapacity || !raw.cycleCount) {
-    const reportPath = path.join(os.tmpdir(), `pc-cleanup-battery-${Date.now()}.xml`);
+    const reportPath = path.join(os.tmpdir(), `bob-battery-${Date.now()}.xml`);
     const fallback = await ps.json(powercfgScript(reportPath)).catch(() => null);
     if (fallback) {
       if (!raw.designCapacity && fallback.design) raw.designCapacity = fallback.design;

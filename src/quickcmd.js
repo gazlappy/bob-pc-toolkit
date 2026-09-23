@@ -101,7 +101,7 @@ function resolve(id) {
       case 'gpupdate':
         return 'gpupdate /force | Out-Null';
       case 'restorepoint':
-        return "Checkpoint-Computer -Description 'Manual - PC Cleanup' -RestorePointType 'MODIFY_SETTINGS'";
+        return "Checkpoint-Computer -Description 'Manual - BOB' -RestorePointType 'MODIFY_SETTINGS'";
       case 'highperf':
         return 'powercfg /setactive SCHEME_MIN';
       case 'wsreset':

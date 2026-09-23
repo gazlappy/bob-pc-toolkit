@@ -1428,7 +1428,7 @@ function renderSystem() {
 function buildSystemReport() {
   const info = state.system.info;
   if (!info) return '';
-  const lines = ['PC Cleanup — system report', new Date().toLocaleString('en-GB'), ''];
+  const lines = ['BOB — system report', new Date().toLocaleString('en-GB'), ''];
   lines.push(`OS         ${info.os.caption} (build ${info.os.build}, ${info.os.architecture})`);
   if (info.activation) lines.push(`Activation ${info.activation.status}`);
   lines.push(`Machine    ${[info.machine.manufacturer, info.machine.model].filter(Boolean).join(' ')}`);
@@ -4616,7 +4616,7 @@ function programRow(program) {
   uninstall.addEventListener('click', async () => {
     const ok = await confirmAction({
       title: `Uninstall ${program.name}?`,
-      body: "This opens the program's own uninstaller, which will ask you to confirm. PC Cleanup does not remove any files itself.",
+      body: "This opens the program's own uninstaller, which will ask you to confirm. BOB does not remove any files itself.",
       confirmLabel: 'Open uninstaller',
     });
     if (!ok) return;

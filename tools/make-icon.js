@@ -11,44 +11,61 @@ const { app, BrowserWindow, nativeImage } = require('electron');
 const SIZES = [256, 128, 64, 48, 32, 24, 16];
 const OUT_DIR = path.join(__dirname, '..', 'build');
 
+// A five-point star, points-up, as an SVG path.
+function starPath(cx, cy, outerR, innerR, points = 5, rotDeg = -90) {
+  let d = '';
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = ((rotDeg + (i * 180) / points) * Math.PI) / 180;
+    d += (i === 0 ? 'M' : 'L') + (cx + r * Math.cos(a)).toFixed(2) + ' ' + (cy + r * Math.sin(a)).toFixed(2);
+  }
+  return d + 'Z';
+}
+
+// BOB — "Best Of the Best": a champion's gold star on the app's dark tile, with
+// the wordmark beneath. The star carries the icon at 16px; the word reads at
+// larger sizes.
+const STAR = starPath(128, 100, 76, 32);
+
 const SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5c9bff"/>
-      <stop offset="1" stop-color="#1f5fd6"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#182134"/>
+      <stop offset="1" stop-color="#0b0f17"/>
     </linearGradient>
-    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    <radialGradient id="glow" cx="0.5" cy="0.34" r="0.62">
+      <stop offset="0" stop-color="#3f6fda" stop-opacity="0.60"/>
+      <stop offset="1" stop-color="#3f6fda" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe888"/>
+      <stop offset="0.48" stop-color="#f7bd42"/>
+      <stop offset="1" stop-color="#cd8618"/>
     </linearGradient>
+    <linearGradient id="goldhi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
   </defs>
 
-  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#plate)"/>
-  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#gloss)"/>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#tile)"/>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#glow)"/>
   <rect x="8.5" y="8.5" width="239" height="239" rx="51.5" fill="none"
-        stroke="#ffffff" stroke-opacity="0.30" stroke-width="1.5"/>
+        stroke="#ffffff" stroke-opacity="0.12" stroke-width="1.5"/>
 
-  <!-- Four-point sparkles: crisp enough to survive a 16px taskbar icon. -->
-  <g fill="#ffffff">
-    <path d="M150 44
-             C154 88 168 102 212 106
-             C168 110 154 124 150 168
-             C146 124 132 110 88 106
-             C132 102 146 88 150 44 Z"/>
-    <path d="M84 128
-             C86 154 94 162 120 164
-             C94 166 86 174 84 200
-             C82 174 74 166 48 164
-             C74 162 82 154 84 128 Z"
-          fill-opacity="0.92"/>
-    <path d="M186 172
-             C187 188 192 193 208 194
-             C192 195 187 200 186 216
-             C185 200 180 195 164 194
-             C180 193 185 188 186 172 Z"
-          fill-opacity="0.78"/>
-  </g>
+  <!-- Champion star -->
+  <path d="${STAR}" transform="translate(0,6)" fill="#000000" fill-opacity="0.35" filter="url(#soft)"/>
+  <path d="${STAR}" fill="url(#gold)" stroke="#a96d10" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="${STAR}" fill="url(#goldhi)"/>
+
+  <!-- Wordmark -->
+  <text x="128" y="216" text-anchor="middle"
+        font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="44" letter-spacing="5"
+        fill="#ffdf85">BOB</text>
 </svg>`;
 
 // A minimal ICO container. Each entry holds a complete PNG, which Windows has
