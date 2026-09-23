@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('pc', {
 
   security: () => call('security:read'),
   battery: () => call('battery:read'),
+
+  toolbox: {
+    list: () => call('quickcmd:list'),
+    run: (id) => call('quickcmd:run', id),
+  },
   connections: () => call('connections:read'),
 
   accounts: {

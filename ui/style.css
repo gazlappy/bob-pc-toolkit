@@ -2173,3 +2173,49 @@ select:focus {
 .btn-danger-text:not(:disabled) {
   color: var(--danger);
 }
+
+/* Toolbox ------------------------------------------------------------------ */
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.tool-tile {
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.tool-tile:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.tool-tile.is-action {
+  border-left: 3px solid var(--accent-dim);
+}
+
+.tool-tile.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.tool-label {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.tool-desc {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}

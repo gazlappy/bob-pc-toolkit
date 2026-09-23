@@ -177,6 +177,16 @@ that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
 Signature checks run across a small runspace pool so a machine's worth of
 endpoints resolves in a few seconds rather than tens.
 
+**Toolbox** — the Windows consoles and quick fixes a tech reaches for, as buttons:
+Device Manager, Disk Management, Services, Event Viewer, Task Scheduler, Computer
+Management, Reliability and Resource Monitor; System Information, DirectX
+Diagnostic, msconfig, regedit, System Properties, classic User Accounts; the
+Programs/Network/Power/Sound control panels; and a few one-click actions (flush
+DNS, gpupdate /force, reset the Store cache, restart the Print Spooler or
+Explorer). The renderer only ever sends a tool id — the command is resolved from
+a fixed table in the main process, so nothing the UI sends can become an
+arbitrary command line.
+
 **Accounts** — the everyday "a customer forgot their password" and "this machine
 needs a clean admin account" jobs, done the supported way: on the running machine,
 as an administrator, through the same Local Users and Groups APIs Computer
@@ -308,6 +318,7 @@ src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 src/connections.js active TCP/UDP endpoints by process, signature-flagged
 src/accounts.js local users: create, reset password, enable, promote, delete
+src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance actions
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

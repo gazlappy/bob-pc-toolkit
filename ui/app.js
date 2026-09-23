@@ -25,6 +25,7 @@ const state = {
   connections: { data: null, loaded: false, search: '', publicOnly: false, openListen: false },
   drivers: { data: null, loaded: false, search: '', exporting: false },
   accounts: { data: null, loaded: false },
+  toolbox: { data: null, loaded: false, search: '', running: null },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -131,6 +132,7 @@ function show(view) {
   if (view === 'connections' && !state.connections.loaded) loadConnections();
   if (view === 'drivers' && !state.drivers.loaded) loadDrivers();
   if (view === 'accounts' && !state.accounts.loaded) loadAccounts();
+  if (view === 'toolbox' && !state.toolbox.loaded) loadToolbox();
   if (view === 'backups') loadBackups();
 }
 
@@ -2823,6 +2825,89 @@ $('accounts-new').addEventListener('click', async () => {
   } catch (error) {
     toast(error.message, 'error');
   }
+});
+
+/* Toolbox ------------------------------------------------------------------ */
+
+async function runTool(tool, tile) {
+  if (state.toolbox.running) return;
+  if (tool.confirm) {
+    const ok = await confirmAction({
+      title: `${tool.label}?`,
+      body: tool.id === 'explorer' ? 'The taskbar and desktop will briefly disappear and reload. Any open File Explorer windows will close.' : `Run ${tool.label}?`,
+      confirmLabel: tool.label,
+      danger: false,
+    });
+    if (!ok) return;
+  }
+  state.toolbox.running = tool.id;
+  tile.classList.add('is-busy');
+  try {
+    const result = await window.pc.toolbox.run(tool.id);
+    toast(result.message, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.toolbox.running = null;
+    tile.classList.remove('is-busy');
+  }
+}
+
+function toolTile(tool) {
+  const tile = document.createElement('button');
+  tile.className = `tool-tile${tool.kind === 'action' ? ' is-action' : ''}`;
+  const label = document.createElement('div');
+  label.className = 'tool-label';
+  label.textContent = tool.label;
+  const desc = document.createElement('div');
+  desc.className = 'tool-desc';
+  desc.textContent = tool.desc;
+  tile.append(label, desc);
+  tile.addEventListener('click', () => runTool(tool, tile));
+  return tile;
+}
+
+function renderToolbox() {
+  const body = $('toolbox-body');
+  const data = state.toolbox.data;
+  if (!data) {
+    body.replaceChildren(empty('Loading…'));
+    return;
+  }
+  const term = state.toolbox.search.trim().toLowerCase();
+  const tools = data.tools.filter((t) => !term || `${t.label} ${t.desc}`.toLowerCase().includes(term));
+
+  body.replaceChildren();
+  const groups = [...new Set(tools.map((t) => t.group))];
+  if (!groups.length) {
+    body.replaceChildren(empty('Nothing matches.'));
+    return;
+  }
+  for (const group of groups) {
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = group;
+    body.append(title);
+    const grid = document.createElement('div');
+    grid.className = 'tool-grid';
+    for (const t of tools.filter((x) => x.group === group)) grid.append(toolTile(t));
+    body.append(grid);
+  }
+}
+
+async function loadToolbox() {
+  try {
+    state.toolbox.data = await window.pc.toolbox.list();
+    state.toolbox.loaded = true;
+    renderToolbox();
+  } catch (error) {
+    $('toolbox-body').replaceChildren(empty(error.message));
+  }
+}
+
+$('toolbox-search').addEventListener('input', (event) => {
+  state.toolbox.search = event.target.value;
+  if (state.toolbox.data) renderToolbox();
 });
 
 /* Event log ---------------------------------------------------------------- */
