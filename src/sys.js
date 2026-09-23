@@ -47,7 +47,11 @@ async function elevate() {
   const exe = (app.isPackaged && process.env.PORTABLE_EXECUTABLE_FILE) || process.execPath;
   await ps.mutate(`
 ${ps.payload({ exe, args })}
-  $launchArgs = @($Payload.args)
+  # Each argument is quoted: the app path (e.g. "D:\\Projects\\PC Cleanup")
+  # contains a space, and Start-Process -ArgumentList does not quote array
+  # elements itself, so an unquoted path arrives split and Electron cannot find
+  # the app.
+  $launchArgs = @($Payload.args | ForEach-Object { '"' + $_ + '"' })
   if ($launchArgs.Count -gt 0) {
     Start-Process -FilePath $Payload.exe -ArgumentList $launchArgs -Verb RunAs | Out-Null
   } else {
