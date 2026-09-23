@@ -24,6 +24,7 @@ const state = {
   battery: { data: null, loaded: false },
   connections: { data: null, loaded: false, search: '', publicOnly: false, openListen: false },
   drivers: { data: null, loaded: false, search: '', exporting: false },
+  accounts: { data: null, loaded: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -129,6 +130,7 @@ function show(view) {
   if (view === 'battery' && !state.battery.loaded) loadBattery();
   if (view === 'connections' && !state.connections.loaded) loadConnections();
   if (view === 'drivers' && !state.drivers.loaded) loadDrivers();
+  if (view === 'accounts' && !state.accounts.loaded) loadAccounts();
   if (view === 'backups') loadBackups();
 }
 
@@ -2575,6 +2577,252 @@ $('drivers-export').addEventListener('click', exportDrivers);
 $('drivers-search').addEventListener('input', (event) => {
   state.drivers.search = event.target.value;
   if (state.drivers.data) renderDrivers();
+});
+
+/* Local accounts ----------------------------------------------------------- */
+
+// A form modal for creating a user or setting a password. Resolves with the
+// entered values, or null if cancelled.
+function accountForm({ mode, user }) {
+  return new Promise((resolve) => {
+    const backdrop = $('account-modal');
+    const confirm = $('account-modal-confirm');
+    const cancel = $('account-modal-cancel');
+    const nameField = $('acct-field-name');
+    const fullField = $('acct-field-fullname');
+    const adminField = $('acct-field-admin');
+    const name = $('acct-name');
+    const full = $('acct-fullname');
+    const password = $('acct-password');
+    const blank = $('acct-blank');
+    const admin = $('acct-admin');
+    const pwLabel = $('acct-pw-label');
+    const hint = $('acct-hint');
+
+    const creating = mode === 'create';
+    $('account-modal-title').textContent = creating ? 'New user' : `Set password for ${user.name}`;
+    confirm.textContent = creating ? 'Create' : 'Set password';
+    nameField.hidden = !creating;
+    fullField.hidden = !creating;
+    adminField.hidden = !creating;
+    pwLabel.textContent = creating ? 'Password' : 'New password';
+    name.value = '';
+    full.value = '';
+    password.value = '';
+    blank.checked = false;
+    admin.checked = false;
+    password.disabled = false;
+    hint.textContent = creating ? '' : 'The old password cannot be recovered — this sets a new one.';
+    backdrop.hidden = false;
+    setTimeout(() => (creating ? name : password).focus(), 30);
+
+    const onBlank = () => {
+      password.disabled = blank.checked;
+      if (blank.checked) password.value = '';
+    };
+    const finish = (value) => {
+      backdrop.hidden = true;
+      confirm.removeEventListener('click', onYes);
+      cancel.removeEventListener('click', onNo);
+      blank.removeEventListener('change', onBlank);
+      backdrop.removeEventListener('click', onBackdrop);
+      resolve(value);
+    };
+    const onYes = () => {
+      const payload = {
+        name: name.value.trim(),
+        fullName: full.value.trim(),
+        password: blank.checked ? '' : password.value,
+        blank: blank.checked,
+        admin: admin.checked,
+      };
+      if (creating && !payload.name) {
+        hint.textContent = 'Enter a user name.';
+        return;
+      }
+      if (!blank.checked && !password.value && !creating) {
+        hint.textContent = 'Enter a password, or tick “No password”.';
+        return;
+      }
+      finish(payload);
+    };
+    const onNo = () => finish(null);
+    const onBackdrop = (event) => {
+      if (event.target === backdrop) finish(null);
+    };
+    confirm.addEventListener('click', onYes);
+    cancel.addEventListener('click', onNo);
+    blank.addEventListener('change', onBlank);
+    backdrop.addEventListener('click', onBackdrop);
+  });
+}
+
+function accountRow(user) {
+  const admin = state.admin;
+  const row = document.createElement('div');
+  row.className = `row${user.enabled ? '' : ' is-off'}`;
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const name = document.createElement('div');
+  name.className = 'row-name';
+  name.textContent = user.name;
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.textContent = [
+    user.fullName,
+    user.passwordLastSet ? `password set ${user.passwordLastSet}` : 'password never set',
+    user.lastLogon ? `last logon ${user.lastLogon}` : '',
+    !user.passwordRequired ? 'no password required' : '',
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
+  main.append(name, meta);
+
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  const addTag = (text, cls) => {
+    const t = document.createElement('span');
+    t.className = `tag${cls ? ` ${cls}` : ''}`;
+    t.textContent = text;
+    tags.append(t);
+  };
+  if (user.isCurrent) addTag('You');
+  if (user.isAdmin) addTag('Admin', 'tag-scope-public');
+  if (!user.enabled) addTag('Disabled', 'tag-warn');
+  if (user.isBuiltin) addTag('Built-in');
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+
+  const mkBtn = (label, handler, { danger = false, disabled = false, title = '' } = {}) => {
+    const b = document.createElement('button');
+    b.className = `btn ${danger ? 'btn-ghost btn-small btn-danger-text' : 'btn-ghost btn-small'}`;
+    b.textContent = label;
+    b.disabled = !admin || disabled;
+    b.title = !admin ? 'Restart as administrator to change accounts.' : title;
+    b.addEventListener('click', handler);
+    return b;
+  };
+
+  actions.append(
+    mkBtn('Reset password', async () => {
+      const form = await accountForm({ mode: 'password', user });
+      if (!form) return;
+      try {
+        await window.pc.accounts.setPassword(user.name, form.password);
+        toast(`Password ${form.blank ? 'cleared' : 'set'} for ${user.name}.`, 'good');
+        loadAccounts();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    })
+  );
+
+  actions.append(
+    mkBtn(user.isAdmin ? 'Remove admin' : 'Make admin', async () => {
+      try {
+        await window.pc.accounts.setAdmin(user.name, !user.isAdmin);
+        toast(`${user.name} ${user.isAdmin ? 'removed from' : 'added to'} Administrators.`, 'good');
+        loadAccounts();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }, { disabled: user.isCurrent && user.isAdmin, title: user.isCurrent && user.isAdmin ? 'You cannot remove your own admin rights.' : '' })
+  );
+
+  actions.append(
+    mkBtn(user.enabled ? 'Disable' : 'Enable', async () => {
+      try {
+        await window.pc.accounts.setEnabled(user.name, !user.enabled);
+        toast(`${user.name} ${user.enabled ? 'disabled' : 'enabled'}.`, 'good');
+        loadAccounts();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }, { disabled: user.isCurrent, title: user.isCurrent ? 'You cannot disable the account you are signed in with.' : '' })
+  );
+
+  actions.append(
+    mkBtn('Delete', async () => {
+      const ok = await confirmAction({
+        title: `Delete “${user.name}”?`,
+        body: `The account is removed from this PC. Its profile folder under C:\\Users is left in place. This cannot be undone from here.`,
+        confirmLabel: 'Delete',
+      });
+      if (!ok) return;
+      try {
+        await window.pc.accounts.remove(user.name);
+        toast(`Deleted ${user.name}.`, 'good');
+        loadAccounts();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }, { danger: true, disabled: user.isCurrent || user.isBuiltin, title: user.isBuiltin ? 'Built-in accounts cannot be deleted.' : user.isCurrent ? 'You cannot delete the account you are signed in with.' : '' })
+  );
+
+  row.append(main, tags, actions);
+  return row;
+}
+
+function renderAccounts() {
+  const body = $('accounts-body');
+  const data = state.accounts.data;
+  const banner = $('accounts-banner');
+  banner.replaceChildren();
+  if (!state.admin) {
+    const b = document.createElement('div');
+    b.className = 'ar-summary is-warn';
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = 'Read-only — not running as administrator';
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = 'You can see the accounts, but creating, resetting or changing one needs admin. Restart as admin from the banner on the left.';
+    b.append(lead, sub);
+    banner.append(b);
+  }
+  $('accounts-new').disabled = !state.admin;
+  $('accounts-new').title = state.admin ? '' : 'Restart as administrator to create accounts.';
+
+  if (!data) {
+    body.replaceChildren(empty('Reading accounts…'));
+    return;
+  }
+  body.replaceChildren();
+  const list = document.createElement('div');
+  list.className = 'sec-list';
+  for (const u of data.users) list.append(accountRow(u));
+  body.append(list);
+
+  $('accounts-subtitle').textContent = `${data.summary.total} account${data.summary.total === 1 ? '' : 's'} · ${data.summary.admins} admin · signed in as ${data.summary.current}`;
+}
+
+async function loadAccounts() {
+  state.accounts.loaded = false;
+  renderAccounts();
+  try {
+    state.accounts.data = await window.pc.accounts.list();
+    state.accounts.loaded = true;
+    renderAccounts();
+  } catch (error) {
+    state.accounts.loaded = true;
+    $('accounts-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('accounts-refresh').addEventListener('click', loadAccounts);
+$('accounts-new').addEventListener('click', async () => {
+  const form = await accountForm({ mode: 'create' });
+  if (!form) return;
+  try {
+    await window.pc.accounts.create({ name: form.name, password: form.password, fullName: form.fullName, admin: form.admin });
+    toast(`Created ${form.name}${form.admin ? ' (administrator)' : ''}.`, 'good');
+    loadAccounts();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 });
 
 /* Event log ---------------------------------------------------------------- */

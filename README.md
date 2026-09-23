@@ -177,6 +177,19 @@ that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
 Signature checks run across a small runspace pool so a machine's worth of
 endpoints resolves in a few seconds rather than tens.
 
+**Accounts** — the everyday "a customer forgot their password" and "this machine
+needs a clean admin account" jobs, done the supported way: on the running machine,
+as an administrator, through the same Local Users and Groups APIs Computer
+Management uses. Create a user (optionally an administrator) in one click, reset
+or blank a local account's password, enable/disable, promote/demote to admin, or
+delete. Resetting a password is not *recovering* the old one — Windows keeps only
+a one-way hash, so there is nothing to recover; it sets a new one you choose,
+which gets you into a locked-out local account without any of the offline SAM
+editing or hash-dumping that credential-theft tools do (deliberately not built).
+Every change needs admin and is guarded on both sides: you cannot delete or
+disable the account you are signed in with, cannot remove your own admin rights,
+and the built-in accounts cannot be deleted.
+
 **Repair** — the built-in fix-a-poorly-Windows tools (SFC `/scannow`, DISM
 CheckHealth / ScanHealth / RestoreHealth, and a read-only `chkdsk`) run with
 their output streaming into the app rather than a console that closes on exit.
@@ -294,6 +307,7 @@ src/battery.js  battery wear %, cycle count, live charge (WMI + powercfg)
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 src/connections.js active TCP/UDP endpoints by process, signature-flagged
+src/accounts.js local users: create, reset password, enable, promote, delete
 src/driverexport.js third-party driver list + Export-WindowsDriver backup
 ui/             index.html, style.css, app.js, treemap.js
 ```

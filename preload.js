@@ -53,6 +53,15 @@ contextBridge.exposeInMainWorld('pc', {
   battery: () => call('battery:read'),
   connections: () => call('connections:read'),
 
+  accounts: {
+    list: () => call('accounts:list'),
+    create: (opts) => call('accounts:create', opts),
+    setPassword: (name, password) => call('accounts:setPassword', name, password),
+    setEnabled: (name, enabled) => call('accounts:setEnabled', name, enabled),
+    setAdmin: (name, isAdmin) => call('accounts:setAdmin', name, isAdmin),
+    remove: (name) => call('accounts:remove', name),
+  },
+
   drivers: {
     list: () => call('drivers:list'),
     export: () => call('drivers:export'),

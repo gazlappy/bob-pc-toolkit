@@ -86,6 +86,9 @@
             <span class="nav-dot"></span>Connections
             <span class="nav-count nav-count-warn" id="nav-connections-count"></span>
           </button>
+          <button class="nav-item" data-view="accounts">
+            <span class="nav-dot"></span>Accounts
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -431,6 +434,24 @@
           </div>
         </section>
 
+        <!-- Local accounts -->
+        <section class="view" id="view-accounts">
+          <header class="view-head">
+            <div>
+              <h1>Accounts</h1>
+              <p class="subtitle" id="accounts-subtitle">Local user accounts on this machine.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-primary" id="accounts-new">New user…</button>
+              <button class="btn btn-ghost" id="accounts-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="accounts-banner"></div>
+          <div id="accounts-body">
+            <div class="empty">Reading accounts…</div>
+          </div>
+        </section>
+
         <!-- Connections -->
         <section class="view" id="view-connections">
           <header class="view-head">
@@ -690,6 +711,24 @@
     </div>
 
     <div class="toast-stack" id="toasts"></div>
+
+    <div class="modal-backdrop" id="account-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 id="account-modal-title"></h2>
+        <div class="acct-form">
+          <label class="acct-field" id="acct-field-name"><span>User name</span><input id="acct-name" type="text" autocomplete="off" spellcheck="false" /></label>
+          <label class="acct-field" id="acct-field-fullname"><span>Full name (optional)</span><input id="acct-fullname" type="text" autocomplete="off" spellcheck="false" /></label>
+          <label class="acct-field" id="acct-field-password"><span id="acct-pw-label">Password</span><input id="acct-password" type="text" autocomplete="off" spellcheck="false" /></label>
+          <label class="acct-check" id="acct-field-blank"><input id="acct-blank" type="checkbox" /> No password (blank)</label>
+          <label class="acct-check" id="acct-field-admin"><input id="acct-admin" type="checkbox" /> Administrator account</label>
+        </div>
+        <div class="acct-hint" id="acct-hint"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="account-modal-cancel">Cancel</button>
+          <button class="btn btn-primary" id="account-modal-confirm">Create</button>
+        </div>
+      </div>
+    </div>
 
     <div class="modal-backdrop" id="modal" hidden>
       <div class="modal" role="dialog" aria-modal="true">

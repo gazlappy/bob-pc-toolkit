@@ -26,6 +26,7 @@ const security = require('./src/security');
 const battery = require('./src/battery');
 const connections = require('./src/connections');
 const driverexport = require('./src/driverexport');
+const accounts = require('./src/accounts');
 
 // Set before anything reads app.getPath('userData'), so restore points land in
 // "PC Cleanup" rather than the default "Electron" folder when run from source.
@@ -130,6 +131,12 @@ handle('drivers:reveal', (target) => {
   if (target) shell.openPath(target);
   return true;
 });
+handle('accounts:list', () => accounts.list());
+handle('accounts:create', (opts) => accounts.create(opts || {}));
+handle('accounts:setPassword', (name, password) => accounts.setPassword(name, password));
+handle('accounts:setEnabled', (name, enabled) => accounts.setEnabled(name, enabled));
+handle('accounts:setAdmin', (name, isAdmin) => accounts.setAdmin(name, isAdmin));
+handle('accounts:remove', (name) => accounts.remove(name));
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;
