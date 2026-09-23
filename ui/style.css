@@ -80,6 +80,25 @@ nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Room so the last item clears the scrollbar and doesn't hug the edge. */
+  padding-right: 2px;
+}
+
+/* Thin, unobtrusive scrollbar for the nav. */
+nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.sidebar:hover nav::-webkit-scrollbar-thumb {
+  background: #2a323c;
 }
 
 .nav-item {
@@ -841,7 +860,8 @@ nav {
 }
 
 .sidebar-foot {
-  margin-top: auto;
+  flex: 0 0 auto;
+  padding-top: 4px;
 }
 
 .admin-card {
