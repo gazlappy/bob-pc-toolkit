@@ -34,6 +34,9 @@
             <span class="nav-dot"></span>Registry
             <span class="nav-count" id="nav-registry-count"></span>
           </button>
+          <button class="nav-item" data-view="explorer">
+            <span class="nav-dot"></span>Explorer tweaks
+          </button>
 
           <div class="nav-group-label">Programs &amp; startup</div>
           <button class="nav-item" data-view="programs">
@@ -270,6 +273,22 @@
           </div>
 
           <div id="registry-groups"></div>
+        </section>
+
+        <!-- Explorer tweaks -->
+        <section class="view" id="view-explorer">
+          <header class="view-head">
+            <div>
+              <h1>Explorer tweaks</h1>
+              <p class="subtitle">Small, per-user, reversible File Explorer changes.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="explorer-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="explorer-body">
+            <div class="empty">Reading Explorer settings…</div>
+          </div>
         </section>
 
         <!-- Large files -->

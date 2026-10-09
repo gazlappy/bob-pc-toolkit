@@ -76,6 +76,12 @@ contextBridge.exposeInMainWorld('pc', {
     open: () => call('report:open'),
   },
 
+  tweaks: {
+    galleryStatus: () => call('tweaks:galleryStatus'),
+    setGalleryHidden: (hidden) => call('tweaks:setGalleryHidden', hidden),
+    restartExplorer: () => call('tweaks:restartExplorer'),
+  },
+
   accounts: {
     list: () => call('accounts:list'),
     create: (opts) => call('accounts:create', opts),

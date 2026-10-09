@@ -31,6 +31,7 @@ const state = {
   ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
   report: { data: null, loaded: false },
   hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
+  explorer: { gallery: null, loaded: false, busy: false, dirty: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -142,6 +143,7 @@ function show(view) {
   if (view === 'wifi' && !state.wifi.loaded) loadWifi();
   if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
   if (view === 'report' && !state.report.loaded) loadReport();
+  if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
   if (view === 'backups') loadBackups();
@@ -3559,6 +3561,109 @@ $('report-open').addEventListener('click', async () => {
     toast(error.message, 'error');
   }
 });
+
+/* Explorer tweaks ---------------------------------------------------------- */
+
+function renderExplorer() {
+  const body = $('explorer-body');
+  const g = state.explorer.gallery;
+  if (!g) {
+    body.replaceChildren(empty('Reading Explorer settings…'));
+    return;
+  }
+
+  body.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'tweak-card';
+
+  const head = document.createElement('div');
+  head.className = 'tweak-head';
+  const title = document.createElement('div');
+  title.className = 'tweak-title';
+  title.textContent = 'File Explorer Gallery';
+  const stateTag = document.createElement('span');
+  if (!g.supported) {
+    stateTag.className = 'tag';
+    stateTag.textContent = 'Windows 11 only';
+  } else {
+    stateTag.className = `tag ${g.hidden ? 'tag-warn' : ''}`;
+    stateTag.textContent = g.hidden ? 'Hidden' : 'Showing';
+  }
+  head.append(title, stateTag);
+
+  const desc = document.createElement('div');
+  desc.className = 'tweak-desc';
+  desc.textContent = g.supported
+    ? 'Windows 11 pins a "Gallery" photo view to the File Explorer sidebar. Hide it to declutter the navigation pane — it is a per-user change you can restore any time, no admin needed.'
+    : `The File Explorer Gallery is a Windows 11 feature. This PC is on build ${g.build}, so there is nothing to remove here.`;
+
+  const actions = document.createElement('div');
+  actions.className = 'tweak-actions';
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = `btn ${g.hidden ? 'btn-ghost' : 'btn-primary'}`;
+  toggleBtn.textContent = state.explorer.busy ? 'Working…' : g.hidden ? 'Restore Gallery' : 'Hide Gallery';
+  toggleBtn.disabled = !g.supported || state.explorer.busy;
+  toggleBtn.addEventListener('click', async () => {
+    state.explorer.busy = true;
+    renderExplorer();
+    try {
+      await window.pc.tweaks.setGalleryHidden(!g.hidden);
+      state.explorer.gallery = await window.pc.tweaks.galleryStatus();
+      state.explorer.dirty = true;
+      toast(`Gallery ${g.hidden ? 'restored' : 'hidden'}.`, 'good');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      state.explorer.busy = false;
+      renderExplorer();
+    }
+  });
+  actions.append(toggleBtn);
+
+  card.append(head, desc, actions);
+
+  // Once changed, the pane only updates when Explorer reloads.
+  if (state.explorer.dirty) {
+    const applyRow = document.createElement('div');
+    applyRow.className = 'tweak-apply';
+    const note = document.createElement('span');
+    note.textContent = 'Restart File Explorer to see the change.';
+    const restart = document.createElement('button');
+    restart.className = 'btn btn-ghost btn-small';
+    restart.textContent = 'Restart Explorer';
+    restart.addEventListener('click', async () => {
+      try {
+        await window.pc.tweaks.restartExplorer();
+        state.explorer.dirty = false;
+        toast('File Explorer restarted.', 'good');
+        renderExplorer();
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+    applyRow.append(note, restart);
+    card.append(applyRow);
+  }
+
+  body.append(card);
+}
+
+async function loadExplorer() {
+  state.explorer.loaded = false;
+  state.explorer.dirty = false;
+  renderExplorer();
+  try {
+    state.explorer.gallery = await window.pc.tweaks.galleryStatus();
+    state.explorer.loaded = true;
+    renderExplorer();
+  } catch (error) {
+    state.explorer.loaded = true;
+    $('explorer-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('explorer-refresh').addEventListener('click', loadExplorer);
 
 /* Hardware test bench ------------------------------------------------------ */
 

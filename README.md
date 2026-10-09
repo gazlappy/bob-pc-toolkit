@@ -70,6 +70,14 @@ installed: leftover Add/Remove Programs entries, App Paths, shared-DLL
 reference counts, cached program names, and startup entries whose target is
 gone. Every removal is backed up first.
 
+**Explorer tweaks** — small, per-user, reversible File Explorer changes. The
+first is hiding the **Gallery** item Windows 11 pins to the navigation pane: it
+sets `System.IsPinnedToNameSpaceTree` to 0 under the Gallery CLSID in `HKCU`
+(removing the value restores the default), so no admin is needed and it undoes
+cleanly. Explorer reloads to apply, which the tab offers in a click. It only
+means anything on Windows 11, so on Windows 10 the card says so and the button is
+disabled rather than writing a registry key that would do nothing.
+
 **Large files** — two views of the same folders (Downloads, Desktop, Documents,
 Videos, Pictures). Known folders are resolved through Windows, so a Desktop
 redirected into OneDrive is found correctly rather than missed.
@@ -360,6 +368,7 @@ src/startup.js  startup entries and scheduled tasks
 src/clean.js    cleanup targets, scanning, deletion, the safety guard
 src/files.js    large/old file scan, known-folder resolution, Recycle Bin
 src/registry.js registry scan and clean
+src/tweaks.js   reversible Explorer tweaks (hide the Win11 Gallery nav item)
 src/backup.js   .reg restore points: write, list, restore, discard
 src/treemap.js  size tree for the map, pruned per-node for the renderer
 src/duplicates.js  three-pass duplicate detection

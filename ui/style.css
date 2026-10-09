@@ -2496,3 +2496,49 @@ select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Explorer tweaks ---------------------------------------------------------- */
+
+.tweak-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  max-width: 640px;
+}
+
+.tweak-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.tweak-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tweak-desc {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+
+.tweak-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tweak-apply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+}

@@ -34,6 +34,7 @@ const partition = require('./src/partition');
 const wifi = require('./src/wifi');
 const ghostdevices = require('./src/ghostdevices');
 const report = require('./src/report');
+const tweaks = require('./src/tweaks');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -185,6 +186,9 @@ handle('report:open', async () => {
   await shell.openPath(file);
   return { path: file };
 });
+handle('tweaks:galleryStatus', () => tweaks.galleryStatus());
+handle('tweaks:setGalleryHidden', (hidden) => tweaks.setGalleryHidden(hidden));
+handle('tweaks:restartExplorer', () => tweaks.restartExplorer());
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;
