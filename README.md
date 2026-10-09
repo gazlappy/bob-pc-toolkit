@@ -223,6 +223,19 @@ that install per-user in AppData (Slack, Spotify, this one) do not cry wolf.
 Signature checks run across a small runspace pool so a machine's worth of
 endpoints resolves in a few seconds rather than tens.
 
+**BitLocker** — the drive-encryption controls a tech reaches for. Per volume:
+the encryption state (protected / suspended / not encrypted), method and
+progress, and the 48-digit **recovery keys** this machine holds — masked, with
+Show / Copy, and a *Save recovery keys…* button that writes them all to a text
+file. Own-machine recovery, the same footing as the product-key and Wi-Fi tools.
+It can **suspend** protection (the safe thing to do before a BIOS/firmware
+update, so the box does not demand a key on reboot) and **resume** it, or **turn
+off** encryption (decrypt — data kept, runs in the background) behind a confirm.
+Everything BitLocker needs admin, so unelevated the tab says "needs admin"
+instead of a blank. Enabling BitLocker from scratch is deliberately left to
+Windows' own wizard — a botched protector or un-backed-up key can lock a user out
+for good.
+
 **Wi-Fi keys** — the passwords this machine already has saved, so after a reset or
 reinstall the PC (and the customer's other kit) can get back online without
 hunting for the router sticker. Own-machine recovery, the same idea as the
@@ -385,6 +398,7 @@ src/battery.js  battery wear %, cycle count, live charge (WMI + powercfg)
 src/autoruns.js persistence auditor: autostart surfaces, signature-flagged
 src/security.js security posture: Defender/Firewall/BitLocker/UAC/accounts, graded
 src/connections.js active TCP/UDP endpoints by process, signature-flagged
+src/bitlocker.js BitLocker status, recovery keys, suspend/resume/decrypt
 src/accounts.js local users: create, reset password, enable, promote, delete
 src/quickcmd.js toolbox: launch consoles/control panels + quick maintenance actions
 src/partition.js disk/partition viewer + reversible drive-letter/label edits

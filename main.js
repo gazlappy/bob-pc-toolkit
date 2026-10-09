@@ -35,6 +35,7 @@ const wifi = require('./src/wifi');
 const ghostdevices = require('./src/ghostdevices');
 const report = require('./src/report');
 const tweaks = require('./src/tweaks');
+const bitlocker = require('./src/bitlocker');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -189,6 +190,36 @@ handle('report:open', async () => {
 handle('tweaks:galleryStatus', () => tweaks.galleryStatus());
 handle('tweaks:setGalleryHidden', (hidden) => tweaks.setGalleryHidden(hidden));
 handle('tweaks:restartExplorer', () => tweaks.restartExplorer());
+handle('bitlocker:status', () => bitlocker.status());
+handle('bitlocker:suspend', (mount) => bitlocker.suspend(mount));
+handle('bitlocker:resume', (mount) => bitlocker.resume(mount));
+handle('bitlocker:decrypt', (mount) => bitlocker.decrypt(mount));
+handle('bitlocker:saveKeys', async () => {
+  const s = await bitlocker.status();
+  if (s.adminNeeded) throw new Error('BitLocker needs administrator rights. Restart as admin, then try again.');
+  const withKeys = s.volumes.filter((v) => v.recoveryKeys && v.recoveryKeys.length);
+  if (!withKeys.length) throw new Error('No recovery keys found on this machine.');
+  const stamp = new Date().toLocaleString('en-GB');
+  const lines = [`BOB — BitLocker recovery keys`, `${os.hostname()} · ${stamp}`, ''];
+  for (const v of withKeys) {
+    lines.push(`Drive ${v.mount}${v.isOs ? ' (System)' : ''} — ${v.volumeStatus}${v.method ? `, ${v.method}` : ''}`);
+    for (const k of v.recoveryKeys) {
+      lines.push(`  Identifier : ${k.id}`);
+      lines.push(`  Recovery key: ${k.key}`);
+    }
+    lines.push('');
+  }
+  lines.push('Keep this somewhere safe — anyone with a recovery key can unlock the drive.');
+  const win = BrowserWindow.getAllWindows()[0];
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Save BitLocker recovery keys',
+    defaultPath: path.join(os.homedir(), 'Desktop', `BitLocker recovery keys ${new Date().toISOString().slice(0, 10)}.txt`),
+    filters: [{ name: 'Text file', extensions: ['txt'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  fs.writeFileSync(result.filePath, lines.join('\r\n'), 'utf8');
+  return { canceled: false, path: result.filePath, count: withKeys.length };
+});
 handle('sys:copy', (text) => {
   clipboard.writeText(String(text ?? ''));
   return true;

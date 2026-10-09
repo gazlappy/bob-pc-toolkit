@@ -32,6 +32,7 @@ const state = {
   report: { data: null, loaded: false },
   hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
   explorer: { gallery: null, loaded: false, busy: false, dirty: false },
+  bitlocker: { data: null, loaded: false, revealed: new Set(), busy: false },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -144,6 +145,7 @@ function show(view) {
   if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
   if (view === 'report' && !state.report.loaded) loadReport();
   if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
+  if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
   if (view === 'backups') loadBackups();
@@ -3664,6 +3666,214 @@ async function loadExplorer() {
 }
 
 $('explorer-refresh').addEventListener('click', loadExplorer);
+
+/* BitLocker ---------------------------------------------------------------- */
+
+async function bitlockerAction(vol, action, confirmOpts) {
+  if (state.bitlocker.busy) return;
+  if (confirmOpts) {
+    const ok = await confirmAction(confirmOpts);
+    if (!ok) return;
+  }
+  state.bitlocker.busy = true;
+  renderBitlocker();
+  try {
+    await window.pc.bitlocker[action](vol.mount);
+    toast(`${vol.mount} — ${action} done.`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.bitlocker.busy = false;
+    state.bitlocker.data = await window.pc.bitlocker.status().catch(() => state.bitlocker.data);
+    renderBitlocker();
+  }
+}
+
+function bitlockerVolumeCard(vol) {
+  const card = document.createElement('div');
+  card.className = 'bl-card';
+
+  const head = document.createElement('div');
+  head.className = 'bl-head';
+  const title = document.createElement('div');
+  title.className = 'bl-title';
+  title.textContent = `${vol.mount}${vol.isOs ? '  ·  System drive' : ''}`;
+  const tags = document.createElement('div');
+  tags.className = 'row-tags';
+  const addTag = (text, cls) => {
+    const t = document.createElement('span');
+    t.className = `tag${cls ? ` ${cls}` : ''}`;
+    t.textContent = text;
+    tags.append(t);
+  };
+  const encrypted = /fullyencrypted/i.test(vol.volumeStatus) || /encryptioninprogress|encryptionpaused/i.test(vol.volumeStatus);
+  const decrypted = /fullydecrypted/i.test(vol.volumeStatus);
+  if (decrypted) addTag('Not encrypted');
+  else if (vol.protectionOn) addTag('Protected', 'tag-scope-public');
+  else if (encrypted) addTag('Suspended', 'tag-warn');
+  if (vol.locked) addTag('Locked', 'tag-warn');
+  head.append(title, tags);
+  card.append(head);
+
+  const meta = document.createElement('div');
+  meta.className = 'bl-meta';
+  meta.textContent = [vol.volumeStatus, vol.method, vol.protectorTypes.join(', ')].filter(Boolean).join('  ·  ');
+  card.append(meta);
+
+  // Progress bar while (de)encrypting.
+  if (/inprogress/i.test(vol.volumeStatus) && vol.percent) {
+    const bar = document.createElement('div');
+    bar.className = 'bl-bar';
+    const fill = document.createElement('div');
+    fill.className = 'bl-bar-fill';
+    fill.style.width = `${vol.percent}%`;
+    bar.append(fill);
+    card.append(bar);
+    const pct = document.createElement('div');
+    pct.className = 'bl-meta';
+    pct.textContent = `${vol.percent}% ${/decryption/i.test(vol.volumeStatus) ? 'decrypted' : 'encrypted'}`;
+    card.append(pct);
+  }
+
+  // Recovery keys — masked, per key.
+  for (const k of vol.recoveryKeys) {
+    const keyRow = document.createElement('div');
+    keyRow.className = 'bl-key';
+    const label = document.createElement('div');
+    label.className = 'bl-key-label';
+    const revealed = state.bitlocker.revealed.has(k.id);
+    label.textContent = `Recovery key  ·  ${revealed ? k.key : '•'.repeat(12) + '  (ID ' + (k.id || '').slice(0, 8) + '…)'}`;
+    const btns = document.createElement('div');
+    btns.className = 'row-actions';
+    const show = document.createElement('button');
+    show.className = 'btn btn-ghost btn-small';
+    show.textContent = revealed ? 'Hide' : 'Show';
+    show.addEventListener('click', () => {
+      if (state.bitlocker.revealed.has(k.id)) state.bitlocker.revealed.delete(k.id);
+      else state.bitlocker.revealed.add(k.id);
+      renderBitlocker();
+    });
+    const copy = document.createElement('button');
+    copy.className = 'btn btn-ghost btn-small';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', async () => {
+      try { await window.pc.copyText(k.key); toast(`Copied the recovery key for ${vol.mount}.`, 'good'); } catch (e) { toast(e.message, 'error'); }
+    });
+    btns.append(show, copy);
+    keyRow.append(label, btns);
+    card.append(keyRow);
+  }
+
+  // Actions.
+  const actions = document.createElement('div');
+  actions.className = 'bl-actions';
+  const mkBtn = (label, cls, handler) => {
+    const b = document.createElement('button');
+    b.className = `btn ${cls} btn-small`;
+    b.textContent = label;
+    b.disabled = state.bitlocker.busy;
+    b.addEventListener('click', handler);
+    return b;
+  };
+  if (vol.protectionOn) {
+    actions.append(mkBtn('Suspend protection', 'btn-ghost', () =>
+      bitlockerAction(vol, 'suspend', {
+        title: `Suspend BitLocker on ${vol.mount}?`,
+        body: 'Protection pauses until you resume it — the drive stays encrypted but will not ask for a key on reboot. Use this before a BIOS/firmware update, then resume when done.',
+        confirmLabel: 'Suspend',
+        danger: false,
+      })
+    ));
+  } else if (encrypted) {
+    actions.append(mkBtn('Resume protection', 'btn-primary', () => bitlockerAction(vol, 'resume', null)));
+  }
+  if (encrypted || vol.protectionOn) {
+    actions.append(mkBtn('Turn off (decrypt)', 'btn-ghost btn-danger-text', () =>
+      bitlockerAction(vol, 'decrypt', {
+        title: `Turn off BitLocker on ${vol.mount}?`,
+        body: 'This decrypts the whole drive — your files are kept, but the drive will no longer be encrypted. It runs in the background and can take a while on a large disk.',
+        confirmLabel: 'Turn off',
+        danger: true,
+      })
+    ));
+  }
+  if (actions.children.length) card.append(actions);
+
+  return card;
+}
+
+function renderBitlocker() {
+  const body = $('bitlocker-body');
+  const banner = $('bitlocker-banner');
+  banner.replaceChildren();
+  const data = state.bitlocker.data;
+
+  if (!data) {
+    body.replaceChildren(empty('Reading BitLocker status…'));
+    $('bitlocker-savekeys').hidden = true;
+    return;
+  }
+  if (!data.supported) {
+    body.replaceChildren(empty('BitLocker is not available on this edition of Windows (it needs Pro or better).'));
+    $('bitlocker-subtitle').textContent = 'Not available on this edition.';
+    $('bitlocker-savekeys').hidden = true;
+    return;
+  }
+  if (data.adminNeeded) {
+    const b = document.createElement('div');
+    b.className = 'ar-summary is-warn';
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = 'Needs administrator rights';
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = 'Windows only reveals BitLocker status and recovery keys to an administrator. Restart as admin from the banner on the left.';
+    b.append(lead, sub);
+    banner.append(b);
+    body.replaceChildren();
+    $('bitlocker-subtitle').textContent = 'Restart as admin to read BitLocker.';
+    $('bitlocker-savekeys').hidden = true;
+    return;
+  }
+
+  const anyKeys = data.volumes.some((v) => v.recoveryKeys && v.recoveryKeys.length);
+  $('bitlocker-savekeys').hidden = !anyKeys;
+
+  body.replaceChildren();
+  if (!data.volumes.length) {
+    body.replaceChildren(empty('No BitLocker-capable volumes found.'));
+  } else {
+    for (const v of data.volumes) body.append(bitlockerVolumeCard(v));
+  }
+  const encd = data.volumes.filter((v) => v.protectionOn).length;
+  $('bitlocker-subtitle').textContent = `${data.volumes.length} volume${data.volumes.length === 1 ? '' : 's'} · ${encd} protected`;
+}
+
+async function loadBitlocker() {
+  state.bitlocker.loaded = false;
+  state.bitlocker.revealed = new Set();
+  renderBitlocker();
+  try {
+    state.bitlocker.data = await window.pc.bitlocker.status();
+    state.bitlocker.loaded = true;
+    renderBitlocker();
+  } catch (error) {
+    state.bitlocker.loaded = true;
+    $('bitlocker-body').replaceChildren(empty(error.message));
+    toast(error.message, 'error');
+  }
+}
+
+$('bitlocker-refresh').addEventListener('click', loadBitlocker);
+$('bitlocker-savekeys').addEventListener('click', async () => {
+  try {
+    const r = await window.pc.bitlocker.saveKeys();
+    if (r && r.canceled) return;
+    toast(`Saved recovery keys for ${r.count} volume${r.count === 1 ? '' : 's'} to ${r.path}`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
 
 /* Hardware test bench ------------------------------------------------------ */
 

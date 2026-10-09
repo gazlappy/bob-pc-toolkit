@@ -82,6 +82,14 @@ contextBridge.exposeInMainWorld('pc', {
     restartExplorer: () => call('tweaks:restartExplorer'),
   },
 
+  bitlocker: {
+    status: () => call('bitlocker:status'),
+    suspend: (mount) => call('bitlocker:suspend', mount),
+    resume: (mount) => call('bitlocker:resume', mount),
+    decrypt: (mount) => call('bitlocker:decrypt', mount),
+    saveKeys: () => call('bitlocker:saveKeys'),
+  },
+
   accounts: {
     list: () => call('accounts:list'),
     create: (opts) => call('accounts:create', opts),

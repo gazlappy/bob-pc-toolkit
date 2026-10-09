@@ -2542,3 +2542,71 @@ select:focus {
   color: var(--warn);
   font-size: 12.5px;
 }
+
+/* BitLocker ---------------------------------------------------------------- */
+
+.bl-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.bl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.bl-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bl-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+  user-select: text;
+}
+
+.bl-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+  margin: 10px 0 4px;
+}
+
+.bl-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.bl-key {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.bl-key-label {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  word-break: break-all;
+}
+
+.bl-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}

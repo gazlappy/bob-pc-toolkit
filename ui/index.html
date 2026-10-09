@@ -97,6 +97,9 @@
             <span class="nav-dot"></span>Connections
             <span class="nav-count nav-count-warn" id="nav-connections-count"></span>
           </button>
+          <button class="nav-item" data-view="bitlocker">
+            <span class="nav-dot"></span>BitLocker
+          </button>
 
           <div class="nav-group-label">Accounts &amp; keys</div>
           <button class="nav-item" data-view="accounts">
@@ -582,6 +585,24 @@
           <div id="accounts-banner"></div>
           <div id="accounts-body">
             <div class="empty">Reading accounts…</div>
+          </div>
+        </section>
+
+        <!-- BitLocker -->
+        <section class="view" id="view-bitlocker">
+          <header class="view-head">
+            <div>
+              <h1>BitLocker</h1>
+              <p class="subtitle" id="bitlocker-subtitle">Drive encryption status, recovery keys, and protection controls.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="bitlocker-savekeys" hidden>Save recovery keys…</button>
+              <button class="btn btn-ghost" id="bitlocker-refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="bitlocker-banner"></div>
+          <div id="bitlocker-body">
+            <div class="empty">Reading BitLocker status…</div>
           </div>
         </section>
 
