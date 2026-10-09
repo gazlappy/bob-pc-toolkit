@@ -41,8 +41,9 @@
     },
     "portable": {
       "artifactName": "BOB.exe",
-      "unicode": true
+      "unicode": true,
+      "splashImage": "build/splash.bmp"
     },
-    "compression": "maximum"
+    "compression": "store"
   }
 }

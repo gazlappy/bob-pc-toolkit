@@ -5685,7 +5685,21 @@ $('backups-folder').addEventListener('click', () => {
 
 /* Boot --------------------------------------------------------------------- */
 
-loadOverview();
+let bootHidden = false;
+function hideBoot() {
+  if (bootHidden) return;
+  bootHidden = true;
+  const b = $('boot');
+  if (!b) return;
+  b.classList.add('is-gone');
+  setTimeout(() => b.remove(), 400);
+}
+
+// Drop the loading overlay once the first data is in (or after a safety timeout
+// so a slow PowerShell call can never leave it stuck on screen).
+loadOverview().finally(hideBoot);
+setTimeout(hideBoot, 6000);
+
 loadRoots();
 loadBackups();
 renderFiles();
