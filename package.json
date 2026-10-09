@@ -1,6 +1,6 @@
 {
   "name": "pc-cleanup",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "BOB (Best Of the Best) — an all-in-one Windows bench technician's toolkit: clean up, diagnose, repair and recover.",
   "main": "main.js",
   "private": true,
@@ -40,7 +40,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "requireAdministrator"
     },
     "portable": {
       "artifactName": "BOB.exe",
