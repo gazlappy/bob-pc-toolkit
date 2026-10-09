@@ -24,6 +24,12 @@ const { spawn } = require('child_process');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 const isUrl = (s) => /^https?:\/\//i.test(String(s || ''));
 
+// Where updates come from unless the user overrides it in the Update tab. Points
+// at the latest GitHub release's assets (version.json + BOB.exe), which are
+// public downloads, so any copy updates with no login. "…/releases/latest/
+// download/<name>" always resolves to the newest release's asset.
+const DEFAULT_SOURCE = 'https://github.com/gazlappy/bob-pc-toolkit/releases/latest/download';
+
 // Read the app's own version from the bundled package.json. app.getVersion()
 // is unreliable when run from source (it can report Electron's version), but the
 // package.json ships inside the app in both dev and the packaged build.
@@ -50,8 +56,10 @@ function writeSettings(settings) {
 
 function getConfig() {
   const s = readSettings();
+  const custom = (s.updateSource || '').trim();
   return {
-    source: s.updateSource || '',
+    source: custom || DEFAULT_SOURCE,
+    isDefault: !custom,
     current: APP_VERSION,
     portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
   };

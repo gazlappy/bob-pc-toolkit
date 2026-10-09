@@ -3,3 +3,6 @@ dist/
 
 # Local editor and preview tooling.
 .claude/launch.json
+
+# Throwaway test harness (recreated per session).
+_probe.js
