@@ -591,27 +591,33 @@ matching in-app loading overlay covers the brief gap after the window appears.
 
 ## Updating
 
-BOB can update itself. The **Update** tab checks a source you control and, if a
-newer version is published there, downloads it, checks it against a SHA-256, and
-swaps the running `BOB.exe` for the new one on exit. The source is whatever you
-set in that tab — a web link (`https://…`) or a shared/synced folder (a UNC path,
-or a OneDrive/Dropbox folder) — so "others" can mean colleagues over the internet
-or your own machines on a share. Nothing is fetched from anywhere else, and a
-download whose hash does not match the manifest is thrown away. Self-update only
-works on the portable `BOB.exe`.
+BOB can update itself. The **Update** tab checks a source and, if a newer version
+is published there, downloads it, checks it against a SHA-256, and swaps the
+running `BOB.exe` for the new one on exit. Nothing is fetched from anywhere else,
+a download whose hash does not match the manifest is thrown away, and self-update
+only works on the portable `BOB.exe`.
+
+By default the source is this project's GitHub releases —
+`https://github.com/gazlappy/bob-pc-toolkit/releases/latest/download` — so a fresh
+copy updates with no configuration. (The Update tab lets you override it with any
+web link or a shared/synced folder, e.g. a UNC path or a OneDrive folder, if you'd
+rather distribute another way.)
 
 To publish a new version:
 
 ```bash
 # 1. bump "version" in package.json  (e.g. 1.0.0 -> 1.0.1)
 npm run release                       # builds dist\BOB.exe and writes dist\version.json
-# 2. copy dist\BOB.exe + dist\version.json to your update source
+# 2. on github.com/gazlappy/bob-pc-toolkit → Releases → Draft a new release,
+#    tag it v<version>, and attach BOTH dist\BOB.exe and dist\version.json.
 ```
 
 `npm run release` is `npm run dist` followed by `tools/make-manifest.js`, which
 writes `dist\version.json` ( `{ version, exe, sha256, size, date, notes }` ) for
-the exe it just built. Every BOB pointed at that source then sees the new version
-on its next check. Version comparison is by the dotted number in `package.json`,
+the exe it just built. GitHub's `releases/latest/download/<asset>` link always
+points at the newest release, so every BOB sees the new version on its next
+check. The exe is a release asset, not a committed file (it is far over GitHub's
+100 MB file limit). Version comparison is by the dotted number in `package.json`,
 so the bump is what tells older copies an update exists.
 
 If the build fails with *"Cannot create symbolic link: A required privilege is
