@@ -177,16 +177,49 @@ async function downloadVerified(info, onData) {
 function swapScript(oldPath, newPath) {
   const q = (p) => `'${String(p).replace(/'/g, "''")}'`;
   return `
-$ErrorActionPreference = 'SilentlyContinue'
 $old = ${q(oldPath)}
 $new = ${q(newPath)}
-# Wait until the running copy has fully released the old exe, then swap and relaunch.
-for ($i = 0; $i -lt 120; $i++) {
-  try { $fs = [System.IO.File]::Open($old, 'Open', 'ReadWrite', 'None'); $fs.Close(); break } catch { Start-Sleep -Milliseconds 500 }
+$log = Join-Path $env:TEMP 'bob-update.log'
+function Log($m) { try { "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) $m" | Out-File -LiteralPath $log -Append -Encoding utf8 } catch {} }
+Log "update swap start: old=$old new=$new"
+
+# Wait until no process is still running the old exe (BOB has fully closed).
+# This is reliable even in a OneDrive/synced folder, where a file-lock probe
+# never clears because the sync engine keeps its own handle on the file.
+for ($i = 0; $i -lt 240; $i++) {
+  $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq $old })
+  if ($running.Count -eq 0) { break }
+  Start-Sleep -Milliseconds 500
 }
-Remove-Item -LiteralPath $old -Force
-Move-Item -LiteralPath $new -Destination $old -Force
-Start-Process -FilePath $old
+if (-not (Test-Path -LiteralPath $new)) { Log "new build missing - aborting"; exit 1 }
+
+# Rename the old exe aside first, then move the new one into place. Never delete
+# the old copy before the new one is in place, so a failure can never leave the
+# folder with no working BOB.exe. Retry because OneDrive / antivirus may hold the
+# file briefly after the process exits.
+$oldLeaf = [System.IO.Path]::GetFileName($old)
+$bak = "$old.old"
+$bakLeaf = "$oldLeaf.old"
+$done = $false
+for ($i = 0; $i -lt 60; $i++) {
+  try {
+    if (Test-Path -LiteralPath $bak) { Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $old) { Rename-Item -LiteralPath $old -NewName $bakLeaf -ErrorAction Stop }
+    Move-Item -LiteralPath $new -Destination $old -Force -ErrorAction Stop
+    Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+    $done = $true
+    break
+  } catch {
+    Log "attempt $i failed: $($_.Exception.Message)"
+    # If old was moved aside but new did not land, restore old so BOB still runs.
+    if ((Test-Path -LiteralPath $bak) -and -not (Test-Path -LiteralPath $old)) {
+      try { Rename-Item -LiteralPath $bak -NewName $oldLeaf -ErrorAction SilentlyContinue } catch {}
+    }
+    Start-Sleep -Milliseconds 1000
+  }
+}
+if ($done) { Log "swap OK"; Start-Process -FilePath $old }
+else { Log "swap FAILED after retries - the new build is at $new" }
 `;
 }
 
