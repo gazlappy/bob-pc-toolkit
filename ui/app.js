@@ -3948,12 +3948,18 @@ function renderUpdate() {
     rc.className = `ar-summary ${r.newer ? 'is-warn' : 'is-good'}`;
     const lead = document.createElement('div');
     lead.className = 'ar-summary-lead';
-    lead.textContent = r.newer ? `Update available — BOB ${r.latest}` : `Up to date (BOB ${r.current})`;
+    lead.textContent = r.newer
+      ? `Update available — BOB ${r.latest}`
+      : r.noRelease
+        ? 'No update published yet'
+        : `Up to date (BOB ${r.current})`;
     const sub = document.createElement('div');
     sub.className = 'ar-summary-sub';
     sub.textContent = r.newer
       ? [r.date && `Released ${r.date}`, r.notes].filter(Boolean).join(' · ') || 'A newer version is published at your source.'
-      : 'This is the latest version published at your source.';
+      : r.noRelease
+        ? `Nothing has been published to the update source yet — you're on BOB ${r.current}.`
+        : 'This is the latest version published at your source.';
     rc.append(lead, sub);
     if (r.newer) {
       const act = document.createElement('div');

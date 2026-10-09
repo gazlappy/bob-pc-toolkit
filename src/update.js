@@ -134,6 +134,12 @@ async function check() {
   try {
     manifest = JSON.parse((await readLocation(manifestLoc)).toString('utf8'));
   } catch (e) {
+    // No manifest where we looked usually just means nothing has been published
+    // yet (a GitHub repo with no releases 404s here) — report that calmly rather
+    // than as an error. A genuinely wrong/unreachable source still surfaces.
+    if (/\b404\b|not found|ENOENT|no such file/i.test(e.message)) {
+      return { current, latest: current, newer: false, noRelease: true, notes: '', date: '', exeLoc: '', sha256: '', size: 0 };
+    }
     throw new Error(`Could not read update info from the source — check the link/folder is right and reachable. (${e.message})`);
   }
   const latest = String(manifest.version || '').trim();
