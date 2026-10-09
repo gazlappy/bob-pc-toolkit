@@ -90,6 +90,18 @@ contextBridge.exposeInMainWorld('pc', {
     saveKeys: () => call('bitlocker:saveKeys'),
   },
 
+  update: {
+    config: () => call('update:config'),
+    setSource: (source) => call('update:setSource', source),
+    check: () => call('update:check'),
+    apply: () => call('update:apply'),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('update:progress', listener);
+      return () => ipcRenderer.removeListener('update:progress', listener);
+    },
+  },
+
   accounts: {
     list: () => call('accounts:list'),
     create: (opts) => call('accounts:create', opts),

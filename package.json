@@ -8,7 +8,10 @@
   "scripts": {
     "start": "electron .",
     "icon": "electron tools/make-icon.js",
-    "dist": "electron-builder"
+    "splash": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/make-splash.ps1",
+    "dist": "electron-builder",
+    "manifest": "node tools/make-manifest.js",
+    "release": "electron-builder && node tools/make-manifest.js"
   },
   "devDependencies": {
     "electron": "^33.2.0",

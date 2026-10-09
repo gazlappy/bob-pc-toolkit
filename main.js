@@ -36,6 +36,7 @@ const ghostdevices = require('./src/ghostdevices');
 const report = require('./src/report');
 const tweaks = require('./src/tweaks');
 const bitlocker = require('./src/bitlocker');
+const update = require('./src/update');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -194,6 +195,10 @@ handle('bitlocker:status', () => bitlocker.status());
 handle('bitlocker:suspend', (mount) => bitlocker.suspend(mount));
 handle('bitlocker:resume', (mount) => bitlocker.resume(mount));
 handle('bitlocker:decrypt', (mount) => bitlocker.decrypt(mount));
+handle('update:config', () => update.getConfig());
+handle('update:setSource', (source) => update.setSource(source));
+handle('update:check', () => update.check());
+handle('update:apply', () => update.apply(progress('update:progress')));
 handle('bitlocker:saveKeys', async () => {
   const s = await bitlocker.status();
   if (s.adminNeeded) throw new Error('BitLocker needs administrator rights. Restart as admin, then try again.');

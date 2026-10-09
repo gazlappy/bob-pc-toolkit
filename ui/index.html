@@ -129,6 +129,10 @@
           <button class="nav-item" data-view="toolbox">
             <span class="nav-dot"></span>Toolbox
           </button>
+          <button class="nav-item" data-view="update">
+            <span class="nav-dot"></span>Update
+            <span class="nav-count nav-count-warn" id="nav-update-count"></span>
+          </button>
 
           <div class="nav-group-label">Safety net</div>
           <button class="nav-item" data-view="backups">
@@ -559,6 +563,20 @@
           <div id="disks-body">
             <div class="empty">Reading disks…</div>
           </div>
+        </section>
+
+        <!-- Update -->
+        <section class="view" id="view-update">
+          <header class="view-head">
+            <div>
+              <h1>Update</h1>
+              <p class="subtitle" id="update-subtitle">Check for and install a newer BOB.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-primary" id="update-check">Check for updates</button>
+            </div>
+          </header>
+          <div id="update-body"></div>
         </section>
 
         <!-- Toolbox -->

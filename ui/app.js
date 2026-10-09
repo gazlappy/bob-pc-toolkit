@@ -33,6 +33,7 @@ const state = {
   hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
   explorer: { gallery: null, loaded: false, busy: false, dirty: false },
   bitlocker: { data: null, loaded: false, revealed: new Set(), busy: false },
+  update: { config: null, loaded: false, result: null, status: '', busy: false, progress: null },
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -146,6 +147,7 @@ function show(view) {
   if (view === 'report' && !state.report.loaded) loadReport();
   if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
+  if (view === 'update' && !state.update.loaded) loadUpdate();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
   if (view === 'backups') loadBackups();
@@ -3865,6 +3867,175 @@ async function loadBitlocker() {
 }
 
 $('bitlocker-refresh').addEventListener('click', loadBitlocker);
+
+/* Update ------------------------------------------------------------------- */
+
+function renderUpdate() {
+  const body = $('update-body');
+  const cfg = state.update.config;
+  if (!cfg) {
+    body.replaceChildren(empty('Loading…'));
+    return;
+  }
+  body.replaceChildren();
+
+  // Current version + source config.
+  const card = document.createElement('div');
+  card.className = 'tweak-card';
+  const ver = document.createElement('div');
+  ver.className = 'bl-meta';
+  ver.textContent = `This copy: BOB ${cfg.current}${cfg.portable ? '' : '  ·  running from source (self-update needs the portable BOB.exe)'}`;
+  card.append(ver);
+
+  const field = document.createElement('label');
+  field.className = 'acct-field';
+  field.style.marginTop = '12px';
+  const flabel = document.createElement('span');
+  flabel.textContent = 'Update source — a web link (https://…) or a shared/synced folder where the new BOB is published';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'update-source';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = 'https://example.com/bob   or   \\\\server\\share\\BOB';
+  input.value = cfg.source || '';
+  field.append(flabel, input);
+  card.append(field);
+
+  const saveRow = document.createElement('div');
+  saveRow.className = 'tweak-actions';
+  saveRow.style.marginTop = '12px';
+  const save = document.createElement('button');
+  save.className = 'btn btn-ghost btn-small';
+  save.textContent = 'Save source';
+  save.addEventListener('click', async () => {
+    try {
+      state.update.config = await window.pc.update.setSource($('update-source').value);
+      state.update.result = null;
+      state.update.status = 'Source saved.';
+      renderUpdate();
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+  saveRow.append(save);
+  card.append(saveRow);
+  body.append(card);
+
+  // Progress bar during download.
+  if (state.update.busy && state.update.progress) {
+    const p = state.update.progress;
+    const prog = document.createElement('div');
+    prog.className = 'tweak-card';
+    const lbl = document.createElement('div');
+    lbl.className = 'bl-meta';
+    const pct = p.total ? Math.round((p.got / p.total) * 100) : 0;
+    lbl.textContent = p.phase === 'restart' ? 'Installing — BOB will restart…' : `Downloading… ${p.total ? `${pct}% (${formatBytes(p.got)} of ${formatBytes(p.total)})` : formatBytes(p.got || 0)}`;
+    const bar = document.createElement('div');
+    bar.className = 'bl-bar';
+    const fill = document.createElement('div');
+    fill.className = 'bl-bar-fill';
+    fill.style.width = `${pct}%`;
+    bar.append(fill);
+    prog.append(lbl, bar);
+    body.append(prog);
+  }
+
+  // Result of a check.
+  const r = state.update.result;
+  if (r) {
+    const rc = document.createElement('div');
+    rc.className = `ar-summary ${r.newer ? 'is-warn' : 'is-good'}`;
+    const lead = document.createElement('div');
+    lead.className = 'ar-summary-lead';
+    lead.textContent = r.newer ? `Update available — BOB ${r.latest}` : `Up to date (BOB ${r.current})`;
+    const sub = document.createElement('div');
+    sub.className = 'ar-summary-sub';
+    sub.textContent = r.newer
+      ? [r.date && `Released ${r.date}`, r.notes].filter(Boolean).join(' · ') || 'A newer version is published at your source.'
+      : 'This is the latest version published at your source.';
+    rc.append(lead, sub);
+    if (r.newer) {
+      const act = document.createElement('div');
+      act.className = 'tweak-actions';
+      act.style.marginTop = '12px';
+      const install = document.createElement('button');
+      install.className = 'btn btn-primary';
+      install.textContent = state.update.busy ? 'Installing…' : `Download & install ${r.latest}`;
+      install.disabled = state.update.busy || !cfg.portable;
+      install.title = cfg.portable ? '' : 'Self-update needs the portable BOB.exe.';
+      install.addEventListener('click', doUpdateApply);
+      act.append(install);
+      rc.append(act);
+    }
+    body.append(rc);
+  } else if (state.update.status) {
+    const s = document.createElement('div');
+    s.className = 'bl-meta';
+    s.style.marginTop = '12px';
+    s.textContent = state.update.status;
+    body.append(s);
+  }
+
+  $('nav-update-count').textContent = r && r.newer ? '1' : '';
+  $('update-check').disabled = state.update.busy;
+}
+
+async function doUpdateCheck() {
+  state.update.busy = true;
+  state.update.status = 'Checking…';
+  state.update.result = null;
+  renderUpdate();
+  try {
+    state.update.result = await window.pc.update.check();
+    state.update.status = '';
+  } catch (error) {
+    state.update.status = error.message;
+  } finally {
+    state.update.busy = false;
+    renderUpdate();
+  }
+}
+
+async function doUpdateApply() {
+  const ok = await confirmAction({
+    title: `Install BOB ${state.update.result.latest}?`,
+    body: 'BOB will download the new version, check it, then close and reopen as the new version. Save any work in BOB first.',
+    confirmLabel: 'Install',
+    danger: false,
+  });
+  if (!ok) return;
+  state.update.busy = true;
+  state.update.progress = { phase: 'download', got: 0, total: 0 };
+  renderUpdate();
+  try {
+    await window.pc.update.apply();
+    // The app quits itself on success; if we are still here, show a note.
+    state.update.status = 'Installing — BOB is restarting…';
+  } catch (error) {
+    state.update.busy = false;
+    state.update.progress = null;
+    toast(error.message, 'error');
+    renderUpdate();
+  }
+}
+
+async function loadUpdate() {
+  try {
+    state.update.config = await window.pc.update.config();
+    state.update.loaded = true;
+    renderUpdate();
+  } catch (error) {
+    $('update-body').replaceChildren(empty(error.message));
+  }
+}
+
+window.pc.update.onProgress((p) => {
+  state.update.progress = p;
+  if (state.update.loaded) renderUpdate();
+});
+
+$('update-check').addEventListener('click', doUpdateCheck);
 $('bitlocker-savekeys').addEventListener('click', async () => {
   try {
     const r = await window.pc.bitlocker.saveKeys();
