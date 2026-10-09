@@ -239,13 +239,37 @@ async function apply(onProgress) {
 
   const helper = path.join(os.tmpdir(), `bob-update-${Date.now()}.ps1`);
   await fs.promises.writeFile(helper, swapScript(target, newExe), 'utf8');
-  spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', helper], {
-    detached: true,
-    stdio: 'ignore',
-  }).unref();
+
+  // Launch the swap helper as a process that outlives BOB. A plain detached
+  // spawn is not enough when BOB runs elevated: the child sits in BOB's job and
+  // is killed the instant app.quit() tears the process tree down, so the helper
+  // never runs (BOB.new.exe is left behind and nothing is swapped). Going
+  // through `cmd /c start` reparents PowerShell into its own process, breaking
+  // it out of that job so it survives our exit. Use the absolute path to
+  // powershell.exe so it resolves regardless of how PATH looks when elevated.
+  const psExe = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+  );
+  const child = spawn(
+    'cmd.exe',
+    ['/c', 'start', '', '/min', psExe, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', helper],
+    { detached: true, stdio: 'ignore', windowsHide: true }
+  );
+  // If the launcher itself can't start, record it so a failed update is never
+  // silent again (the helper logs its own progress once it is running).
+  child.on('error', (err) => {
+    try {
+      fs.appendFileSync(
+        path.join(os.tmpdir(), 'bob-update.log'),
+        `${new Date().toISOString()} could not launch swap helper: ${err.message}\n`
+      );
+    } catch {}
+  });
+  child.unref();
 
   if (onProgress) onProgress({ phase: 'restart' });
-  setTimeout(() => app.quit(), 500);
+  setTimeout(() => app.quit(), 1200);
   return { applied: true, version: info.latest };
 }
 
