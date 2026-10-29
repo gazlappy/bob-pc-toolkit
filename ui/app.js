@@ -33,6 +33,7 @@ const state = {
   hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
   explorer: { gallery: null, loaded: false, busy: false, dirty: false },
   bitlocker: { data: null, loaded: false, revealed: new Set(), busy: false },
+  gpu: { data: null, active: false, timer: null, history: {}, fanMode: {}, busy: false, fanIcons: [], spin: {}, raf: null, lastFrame: 0 },
   update: { config: null, loaded: false, result: null, status: '', busy: false, progress: null },
 };
 
@@ -130,6 +131,8 @@ function show(view) {
   if (view === 'devices' && !state.devices.loaded) loadDevices();
   if (view === 'monitor') startMonitor();
   else stopMonitor();
+  if (view === 'gpu') startGpu();
+  else stopGpu();
   if (view === 'keys' && !state.keys.loaded) loadKeys();
   if (view === 'network' && !state.network.loaded) loadNetwork();
   if (view === 'repair' && !state.repair.loaded) loadRepair();
@@ -1650,6 +1653,666 @@ function stopMonitor() {
   clearTimeout(state.monitor.timer);
   $('monitor-live').hidden = true;
 }
+
+/* Graphics card ------------------------------------------------------------ */
+
+// The card's structure is built once per status read; each 2s sample then only
+// rewrites values in place, so a slider being dragged is never reset under the
+// user's mouse.
+
+const GPU_SPARKS = [
+  { key: 'temp', label: 'Temperature' },
+  { key: 'fan', label: 'Fan' },
+  { key: 'power', label: 'Power draw' },
+  { key: 'load', label: 'GPU load' },
+];
+const GPU_BARS = [
+  { key: 'vram', label: 'Video memory', kind: 'bar' },
+  { key: 'core', label: 'Core clock', kind: 'dial' },
+  { key: 'memclk', label: 'Memory clock', kind: 'dial' },
+  { key: 'limit', label: 'Clocks held back by', kind: 'text' },
+];
+// Visual spin at 100% fan. Kept under half a blade-gap per 60fps frame (7 blades
+// = 51 degrees apart) so the rotor never appears to turn backwards.
+const GPU_FAN_MAX_DEG_PER_S = 1080;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, String(v));
+  return node;
+}
+
+// A fan rotor (housing, seven swept blades, hub) that gpuSpinFrame turns at the
+// card's real fan speed. Every icon for a card shares one spin state.
+function fanIcon(size, bus) {
+  const svg = svgEl('svg', { viewBox: '-50 -50 100 100', width: size, height: size, class: 'gpu-fan', 'aria-hidden': 'true' });
+  svg.append(svgEl('circle', { r: 47, class: 'gpu-fan-ring' }));
+  const rotor = svgEl('g', { class: 'gpu-fan-rotor' });
+  for (let i = 0; i < 7; i++) {
+    rotor.append(svgEl('path', {
+      d: 'M0,-10 C8,-15 21,-28 15,-42 C3,-43 -6,-28 0,-10 Z',
+      transform: `rotate(${((i * 360) / 7).toFixed(2)})`,
+      class: 'gpu-fan-blade',
+    }));
+  }
+  rotor.append(svgEl('circle', { r: 11, class: 'gpu-fan-hub' }));
+  svg.append(rotor);
+  state.gpu.fanIcons.push({ bus, svg, rotor });
+  return svg;
+}
+
+function gpuSpin(bus) {
+  if (!state.gpu.spin[bus]) state.gpu.spin[bus] = { angle: 0, speed: 0, pct: 0 };
+  return state.gpu.spin[bus];
+}
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function gpuSpinFrame(ts) {
+  if (!state.gpu.active) {
+    state.gpu.raf = null;
+    return;
+  }
+  const dt = state.gpu.lastFrame ? Math.min(0.1, (ts - state.gpu.lastFrame) / 1000) : 0;
+  state.gpu.lastFrame = ts;
+  for (const spin of Object.values(state.gpu.spin)) {
+    const target = reduceMotion.matches ? 0 : (spin.pct / 100) * GPU_FAN_MAX_DEG_PER_S;
+    // Ease toward the target so the rotor spins up and coasts down like a fan.
+    spin.speed += (target - spin.speed) * Math.min(1, dt * 2.5);
+    spin.angle = (spin.angle + spin.speed * dt) % 360;
+  }
+  for (const icon of state.gpu.fanIcons) {
+    const spin = state.gpu.spin[icon.bus];
+    if (spin) icon.rotor.setAttribute('transform', `rotate(${spin.angle.toFixed(1)})`);
+  }
+  state.gpu.raf = requestAnimationFrame(gpuSpinFrame);
+}
+
+// Half-circle dial from 0 to the card's maximum, with a needle.
+function gpuDial(id) {
+  const svg = svgEl('svg', { viewBox: '0 0 120 68', class: 'gpu-dial', 'aria-hidden': 'true' });
+  const arc = 'M 12 62 A 48 48 0 0 1 108 62';
+  svg.append(svgEl('path', { d: arc, class: 'gpu-dial-track', pathLength: 100 }));
+  const fill = svgEl('path', { d: arc, class: 'gpu-dial-fill', pathLength: 100, id: `${id}-arc` });
+  fill.style.strokeDasharray = '0 100';
+  svg.append(fill);
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI - (i / 10) * Math.PI;
+    const outer = 41;
+    const inner = i % 5 === 0 ? 34 : 37;
+    svg.append(svgEl('line', {
+      x1: (60 + Math.cos(a) * outer).toFixed(2), y1: (62 - Math.sin(a) * outer).toFixed(2),
+      x2: (60 + Math.cos(a) * inner).toFixed(2), y2: (62 - Math.sin(a) * inner).toFixed(2),
+      class: `gpu-dial-tick${i % 5 === 0 ? ' is-major' : ''}`,
+    }));
+  }
+  const needle = svgEl('line', { x1: 60, y1: 62, x2: 60, y2: 22, class: 'gpu-dial-needle', id: `${id}-needle` });
+  needle.style.transform = 'rotate(-90deg)';
+  svg.append(needle, svgEl('circle', { cx: 60, cy: 62, r: 4.5, class: 'gpu-dial-hub' }));
+  return svg;
+}
+
+function setDial(id, pct) {
+  const v = Math.max(0, Math.min(100, Number(pct) || 0));
+  const arc = $(`${id}-arc`);
+  if (arc) arc.style.strokeDasharray = `${v.toFixed(1)} 100`;
+  const needle = $(`${id}-needle`);
+  if (needle) needle.style.transform = `rotate(${(-90 + v * 1.8).toFixed(1)}deg)`;
+}
+
+function gpuGauge(id, label, kind) {
+  const g = el('div', 'gauge');
+  const top = el('div', 'g-top');
+  top.append(el('span', 'g-label', label));
+  const val = el('span', 'g-val', '—');
+  val.id = `${id}-val`;
+  top.append(val);
+  const sub = el('div', 'g-sub');
+  sub.id = `${id}-sub`;
+  g.append(top, sub);
+  if (kind === 'spark') {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 100 26');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.classList.add('g-spark');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    line.style.stroke = 'var(--accent)';
+    line.id = `${id}-spark`;
+    svg.append(line);
+    g.append(svg);
+  } else if (kind === 'dial') {
+    g.classList.add('gauge-dial');
+    g.append(gpuDial(id));
+    // The max sits under the dial rather than beside the reading.
+    g.append(sub);
+  } else if (kind === 'bar') {
+    const bar = el('div', 'g-bar');
+    const fill = el('div', 'g-fill');
+    fill.id = `${id}-fill`;
+    fill.style.width = '0%';
+    bar.append(fill);
+    g.append(bar);
+  } else {
+    val.classList.add('g-val-text');
+  }
+  return g;
+}
+
+function gpuRange(id, min, max, value, unit, onInput) {
+  const wrap = el('div', 'gpu-range');
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.id = id;
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  input.value = String(Math.min(max, Math.max(min, value)));
+  const scale = el('div', 'gpu-range-scale');
+  scale.append(el('span', '', `${min}${unit}`), el('span', '', `${max}${unit}`));
+  input.addEventListener('input', () => onInput(Number(input.value)));
+  wrap.append(input, scale);
+  return wrap;
+}
+
+function gpuPowerPanel(card) {
+  const p = card.power;
+  const panel = el('div', 'gpu-ctrl');
+  panel.append(el('div', 'gpu-ctrl-title', 'Power limit'));
+  if (p.min == null || p.max == null || p.limit == null) {
+    panel.append(el('div', 'gpu-ctrl-note', 'This card does not report an adjustable power limit.'));
+    return panel;
+  }
+  const lo = Math.ceil(p.min);
+  const hi = Math.floor(p.max);
+  const current = Math.round(p.limit);
+  const def = p.def != null ? Math.round(p.def) : null;
+
+  const value = el('div', 'gpu-ctrl-value', `${current} W`);
+  value.id = `gpu-${card.index}-pl-value`;
+  panel.append(value);
+  panel.append(
+    gpuRange(`gpu-${card.index}-pl`, lo, hi, current, ' W', (w) => {
+      value.textContent = `${w} W${w === current ? '' : '  (not applied)'}`;
+      apply.disabled = state.gpu.busy || w === current || !state.admin;
+    })
+  );
+
+  const actions = el('div', 'bl-actions');
+  const apply = el('button', 'btn btn-primary btn-small', 'Apply');
+  apply.disabled = true;
+  apply.addEventListener('click', () => {
+    const w = Number($(`gpu-${card.index}-pl`).value);
+    gpuAction(() => window.pc.gpu.setPowerLimit(card.index, w), `Power limit set to ${w} W.`, w > (def || hi) ? {
+      title: `Raise the power limit to ${w} W?`,
+      body: `That is above this card's default of ${def} W. The card will draw more power and run hotter — make sure the power supply and cooling can take it.`,
+      confirmLabel: 'Raise limit',
+      danger: true,
+    } : null);
+  });
+  actions.append(apply);
+  if (def != null && def !== current) {
+    const reset = el('button', 'btn btn-ghost btn-small', `Reset to default (${def} W)`);
+    reset.disabled = state.gpu.busy || !state.admin;
+    reset.addEventListener('click', () =>
+      gpuAction(() => window.pc.gpu.resetPowerLimit(card.index), `Power limit back to the default ${def} W.`, null)
+    );
+    actions.append(reset);
+  }
+  panel.append(actions);
+
+  const notes = [`Range ${lo}–${hi} W${def != null ? ` · default ${def} W` : ''}. Lower runs cooler and quieter for a little less speed. Lasts until the PC restarts.`];
+  if (!state.admin) notes.unshift('Needs administrator rights — restart as admin to change it.');
+  panel.append(el('div', 'gpu-ctrl-note', notes.join(' ')));
+  return panel;
+}
+
+function gpuFanPanel(card, limits) {
+  const f = card.fan;
+  const panel = el('div', 'gpu-ctrl');
+  const titleRow = el('div', 'gpu-ctrl-head');
+  titleRow.append(el('div', 'gpu-ctrl-title', 'Fan'), fanIcon(58, card.bus));
+  panel.append(titleRow);
+  if (!f.supported) {
+    panel.append(el('div', 'gpu-ctrl-note', `Fan control isn't available on this card (${f.reason}). The fan stays under the driver's automatic control.`));
+    return panel;
+  }
+  const mode = state.gpu.fanMode[card.bus] || (f.manual ? 'manual' : 'auto');
+  state.gpu.fanMode[card.bus] = mode;
+
+  const seg = el('div', 'segmented gpu-seg');
+  for (const m of ['auto', 'manual']) {
+    const b = el('button', `segment${mode === m ? ' is-active' : ''}`, m === 'auto' ? 'Automatic' : 'Manual');
+    b.disabled = state.gpu.busy;
+    b.addEventListener('click', () => {
+      if (m === mode) return;
+      state.gpu.fanMode[card.bus] = m;
+      // Leaving manual hands the fan straight back; entering it only shows the
+      // slider — nothing changes until Apply.
+      if (m === 'auto' && f.manual) {
+        gpuAction(() => window.pc.gpu.fanAuto(card.bus), 'Fan back on automatic.', null);
+      } else {
+        renderGpu();
+      }
+    });
+    seg.append(b);
+  }
+  panel.append(seg);
+
+  if (mode === 'manual') {
+    const start = f.manual && f.target != null ? f.target : Math.max(f.min, Math.min(f.max, card.fanPct || 50));
+    const value = el('div', 'gpu-ctrl-value', `${start}%`);
+    panel.append(value);
+    panel.append(
+      gpuRange(`gpu-${card.bus}-fan`, f.min, f.max, start, '%', (v) => {
+        value.textContent = `${v}%${f.manual && v === f.target ? '' : '  (not applied)'}`;
+      })
+    );
+    const actions = el('div', 'bl-actions');
+    const apply = el('button', 'btn btn-primary btn-small', f.manual ? 'Apply' : 'Set fan speed');
+    apply.disabled = state.gpu.busy;
+    apply.addEventListener('click', () => {
+      const v = Number($(`gpu-${card.bus}-fan`).value);
+      gpuAction(() => window.pc.gpu.setFan(card.bus, v), `Fan held at ${v}%.`, null);
+    });
+    actions.append(apply);
+    panel.append(actions);
+    panel.append(el('div', 'gpu-ctrl-note',
+      `Held at a fixed speed until you switch back. Goes back to automatic by itself if the card reaches ${limits.watchdogTemp}°C, and whenever BOB closes. Lowest manual speed is ${f.min}%.`));
+  } else {
+    panel.append(el('div', 'gpu-ctrl-note',
+      f.manual
+        ? 'Another tool has this fan on a fixed speed.'
+        : 'The driver speeds the fan up and down with temperature. Switch to Manual to hold a fixed speed — handy for checking a noisy or failing fan.'));
+  }
+  return panel;
+}
+
+function vbiosFact(label, value) {
+  const row = el('div', 'gpu-fact');
+  row.append(el('div', 'gpu-fact-label', label), el('div', 'gpu-fact-value', value || '—'));
+  return row;
+}
+
+function gpuVbiosPanel(card, nvflash) {
+  const v = card.vbios;
+  if (!v) return null;
+  const panel = el('div', 'gpu-ctrl gpu-vbios');
+  const head = el('div', 'gpu-ctrl-head');
+  head.append(el('div', 'gpu-ctrl-title', "VBIOS — the card's own defaults"));
+  if (v.version) head.append(el('span', 'tag', v.version));
+  panel.append(head);
+
+  const facts = el('div', 'gpu-facts');
+  const p = v.power;
+  const w = (n) => (n == null ? null : `${Math.round(n)} W`);
+  facts.append(vbiosFact('Generation', [v.architecture, v.brand].filter(Boolean).join(' · ')));
+  facts.append(vbiosFact('GPU part', [v.partNumber, v.boardId ? `board ${v.boardId}` : ''].filter(Boolean).join(' · ')));
+  facts.append(vbiosFact('Power limit', p.def != null ? `${w(p.def)} default · ${w(p.min)}–${w(p.max)} allowed` : null));
+  const fmin = card.fan.defaultMin;
+  facts.append(vbiosFact('Fan', fmin == null ? null : fmin === 0 ? 'stops at idle (0% minimum)' : `${fmin}% minimum`));
+  facts.append(vbiosFact('Clock ceiling', v.clocks.core ? `${v.clocks.core} MHz core · ${v.clocks.mem} MHz memory` : null));
+  const t = v.temps;
+  const tempBits = [
+    t.target != null ? `aims for ${t.target}°C` : '',
+    t.slowdown != null ? `slows down at ${t.slowdown}°C` : '',
+    t.shutdown != null ? `shuts off at ${t.shutdown}°C` : '',
+  ].filter(Boolean);
+  facts.append(vbiosFact('Temperature', tempBits.join(' · ') || null));
+  if (v.inforom) facts.append(vbiosFact('InfoROM', v.inforom));
+  panel.append(facts);
+
+  const lock = el('div', `gpu-vbios-lock${v.locked === true ? ' is-locked' : v.locked === false ? ' is-open' : ''}`);
+  lock.append(el('div', 'gpu-vbios-lock-lead',
+    v.locked === true ? 'Locked — signed VBIOS' : v.locked === false ? 'Can be changed permanently' : 'Unknown'));
+  lock.append(el('div', 'gpu-ctrl-note', v.note));
+  panel.append(lock);
+
+  const actions = el('div', 'bl-actions');
+  if (nvflash) {
+    const backup = el('button', 'btn btn-primary btn-small', 'Back up VBIOS…');
+    backup.disabled = state.gpu.busy || !state.admin;
+    backup.addEventListener('click', () => gpuBackupVbios(card));
+    actions.append(backup);
+  }
+  const locate = el('button', 'btn btn-ghost btn-small', nvflash ? 'Use a different nvflash…' : 'Locate nvflash…');
+  locate.disabled = state.gpu.busy;
+  locate.addEventListener('click', gpuLocateNvflash);
+  actions.append(locate);
+  panel.append(actions);
+
+  const notes = [];
+  if (nvflash) {
+    notes.push(`Saves an exact copy of the card's firmware with nvflash (${nvflash}). Keep it before any flash — it is the only way back.`);
+    if (!state.admin) notes.unshift('Needs administrator rights — restart as admin to back up.');
+  } else {
+    notes.push("Backing up needs NVIDIA's free nvflash tool (from TechPowerUp), which BOB can't ship. Put nvflash64.exe next to BOB.exe and BOB finds it on its own, or locate it once and BOB remembers.");
+  }
+  panel.append(el('div', 'gpu-ctrl-note', notes.join(' ')));
+  return panel;
+}
+
+async function gpuBackupVbios(card) {
+  if (state.gpu.busy) return;
+  state.gpu.busy = true;
+  renderGpu();
+  try {
+    const name = `${card.name}${card.vbios && card.vbios.version ? ` VBIOS ${card.vbios.version}` : ' VBIOS'}`;
+    const r = await window.pc.gpu.backupVbios(card.index, name);
+    if (!r.canceled) toast(`VBIOS saved (${formatBytes(r.size)}, SHA-256 ${r.sha256.slice(0, 12)}…) to ${r.path}`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.gpu.busy = false;
+    renderGpu();
+  }
+}
+
+async function gpuLocateNvflash() {
+  try {
+    const r = await window.pc.gpu.locateNvflash();
+    if (r.canceled) return;
+    state.gpu.data.nvflash = r.path;
+    toast('nvflash found — BOB will remember it.', 'good');
+    renderGpu();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function gpuCard(card, limits, nvflash) {
+  const node = el('div', 'bl-card gpu-card');
+  const head = el('div', 'bl-head');
+  head.append(el('div', 'bl-title', card.name));
+  const tags = el('div', 'row-tags');
+  const addTag = (text, cls) => tags.append(el('span', `tag${cls ? ` ${cls}` : ''}`, text));
+  if (card.driver) addTag(`Driver ${card.driver}`);
+  if (card.pcie.gen && card.pcie.width) {
+    const slow = (card.pcie.widthMax && card.pcie.width < card.pcie.widthMax) ? ' tag-warn' : '';
+    addTag(`PCIe ${card.pcie.gen}.0 x${card.pcie.width}`, slow.trim());
+  }
+  const pstate = el('span', 'tag');
+  pstate.id = `gpu-${card.index}-pstate`;
+  tags.append(pstate);
+  head.append(tags);
+  node.append(head);
+
+  const sparks = el('div', 'mon-gauges gpu-gauges');
+  for (const s of GPU_SPARKS) {
+    const g = gpuGauge(`gpu-${card.index}-${s.key}`, s.label, 'spark');
+    if (s.key === 'fan') g.querySelector('.g-top').insertBefore(fanIcon(26, card.bus), g.querySelector('.g-val'));
+    sparks.append(g);
+  }
+  const bars = el('div', 'mon-gauges gpu-gauges');
+  for (const b of GPU_BARS) bars.append(gpuGauge(`gpu-${card.index}-${b.key}`, b.label, b.kind));
+  node.append(sparks, bars);
+
+  const ctrls = el('div', 'gpu-ctrls');
+  ctrls.append(gpuPowerPanel(card), gpuFanPanel(card, limits));
+  const vb = gpuVbiosPanel(card, nvflash);
+  if (vb) ctrls.append(vb);
+  node.append(ctrls);
+  return node;
+}
+
+function otherGpuCard(a, nvidia) {
+  const node = el('div', 'bl-card');
+  const head = el('div', 'bl-head');
+  head.append(el('div', 'bl-title', a.name));
+  const tags = el('div', 'row-tags');
+  if (a.vendor) tags.append(el('span', 'tag', a.vendor));
+  if (a.driver) tags.append(el('span', 'tag', `Driver ${a.driver}`));
+  head.append(tags);
+  node.append(head);
+  node.append(el('div', 'bl-meta', [
+    a.vram ? `${formatBytes(a.vram)} video memory` : '',
+    a.mode,
+    a.refresh ? `${a.refresh} Hz` : '',
+    a.driverDate ? `driver dated ${a.driverDate}` : '',
+  ].filter(Boolean).join('  ·  ')));
+  let note;
+  if (a.vendor === 'NVIDIA') {
+    note = nvidia.smi
+      ? `The NVIDIA tools didn't answer (${nvidia.error || 'no reply'}) — reinstalling the NVIDIA driver usually fixes this.`
+      : "NVIDIA's monitoring tool (nvidia-smi) isn't installed — install the full NVIDIA driver to get live sensors and controls here.";
+  } else if (a.vendor === 'AMD') {
+    note = 'Live sensors and controls here work on NVIDIA cards. For this AMD card, use AMD Software: Adrenalin Edition (Performance → Tuning).';
+  } else if (a.vendor === 'Intel') {
+    note = 'Live sensors and controls here work on NVIDIA cards. For Intel graphics, use Intel Arc Control or Intel Graphics Command Center.';
+  } else {
+    note = 'Live sensors and controls here work on NVIDIA cards.';
+  }
+  node.append(el('div', 'gpu-ctrl-note', note));
+  return node;
+}
+
+function gpuHistory(bus) {
+  if (!state.gpu.history[bus]) state.gpu.history[bus] = { temp: [], fan: [], power: [], load: [] };
+  return state.gpu.history[bus];
+}
+
+function setText(id, text) {
+  const n = $(id);
+  if (n) n.textContent = text;
+}
+
+function setBar(id, pct) {
+  const n = $(`${id}-fill`);
+  if (!n) return;
+  const v = Math.max(0, Math.min(100, pct || 0));
+  n.style.width = `${v}%`;
+  n.className = `g-fill ${fillClass(v)}`;
+}
+
+function setSpark(id, history, color) {
+  const n = $(`${id}-spark`);
+  if (!n) return;
+  n.setAttribute('points', sparkPoints(history, 100, 26));
+  n.style.stroke = color || 'var(--accent)';
+}
+
+function applyGpuSample(card) {
+  const id = `gpu-${card.index}`;
+  const h = gpuHistory(card.bus);
+  const push = (arr, v) => {
+    if (v == null) return;
+    arr.push(v);
+    if (arr.length > 60) arr.shift();
+  };
+
+  const t = card.temp;
+  push(h.temp, t);
+  setText(`${id}-temp-val`, t == null ? '—' : `${t}°C`);
+  setText(`${id}-temp-sub`, t == null ? 'not reported' : t >= 85 ? 'very hot' : t >= 75 ? 'warm' : t >= 45 ? 'normal' : 'cool');
+  setSpark(`${id}-temp`, h.temp, t >= 80 ? 'var(--danger)' : t >= 70 ? 'var(--warn)' : 'var(--accent)');
+
+  push(h.fan, card.fanPct);
+  setText(`${id}-fan-val`, card.fanPct == null ? '—' : `${card.fanPct}%`);
+  const f = card.fan;
+  const mode = !f.supported ? 'driver controlled' : f.manual ? `manual${f.setByBob ? ' (BOB)' : ''}` : 'automatic';
+  const rpm = f.rpm != null && f.rpm > 0 ? `${f.rpm.toLocaleString('en-GB')} RPM` : '';
+  const stopped = !f.manual && card.fanPct === 0 && !rpm;
+  setText(`${id}-fan-sub`, stopped ? 'stopped — fan-stop at idle' : [mode, rpm].filter(Boolean).join(' · '));
+  setSpark(`${id}-fan`, h.fan, f.manual ? 'var(--warn)' : 'var(--accent)');
+  gpuSpin(card.bus).pct = card.fanPct || 0;
+  for (const icon of state.gpu.fanIcons) {
+    if (icon.bus !== card.bus) continue;
+    icon.svg.classList.toggle('is-stopped', !card.fanPct);
+    icon.svg.classList.toggle('is-manual', Boolean(f.manual));
+  }
+
+  const p = card.power;
+  const scaleMax = p.max || p.limit || 0;
+  push(h.power, p.draw != null && scaleMax ? (p.draw / scaleMax) * 100 : null);
+  setText(`${id}-power-val`, p.draw == null ? '—' : `${Math.round(p.draw)} W`);
+  setText(`${id}-power-sub`, p.limit != null ? `of ${Math.round(p.limit)} W limit` : 'limit not reported');
+  const nearCap = p.draw != null && p.limit && p.draw >= p.limit * 0.95;
+  setSpark(`${id}-power`, h.power, nearCap ? 'var(--warn)' : 'var(--accent)');
+
+  push(h.load, card.util.gpu);
+  setText(`${id}-load-val`, card.util.gpu == null ? '—' : `${card.util.gpu}%`);
+  setText(`${id}-load-sub`, card.util.mem != null ? `memory controller ${card.util.mem}%` : '');
+  setSpark(`${id}-load`, h.load);
+
+  const m = card.mem;
+  const memPct = m.used != null && m.total ? (m.used / m.total) * 100 : 0;
+  setText(`${id}-vram-val`, m.total ? `${Math.round(memPct)}%` : '—');
+  setText(`${id}-vram-sub`, m.total ? `${formatBytes(m.used * 1048576)} of ${formatBytes(m.total * 1048576)}` : '');
+  setBar(`${id}-vram`, memPct);
+
+  const c = card.clocks;
+  setText(`${id}-core-val`, c.core == null ? '—' : `${c.core} MHz`);
+  setText(`${id}-core-sub`, c.coreMax ? `of ${c.coreMax} MHz max` : '');
+  setDial(`${id}-core`, c.core && c.coreMax ? (c.core / c.coreMax) * 100 : 0);
+  setText(`${id}-memclk-val`, c.mem == null ? '—' : `${c.mem} MHz`);
+  setText(`${id}-memclk-sub`, c.memMax ? `of ${c.memMax} MHz max` : '');
+  setDial(`${id}-memclk`, c.mem && c.memMax ? (c.mem / c.memMax) * 100 : 0);
+
+  const reasons = card.throttle.reasons;
+  const limiting = reasons.filter((r) => r !== 'Idle');
+  setText(`${id}-limit-val`, card.throttle.mask == null ? '—' : limiting.length ? limiting.join(', ') : reasons.length ? 'Idle' : 'Nothing');
+  setText(`${id}-limit-sub`, card.throttle.mask == null ? 'not reported'
+    : limiting.some((r) => /thermal/i.test(r)) ? 'running too hot — check the fan and airflow'
+    : limiting.includes('Power limit') ? 'at its power limit'
+    : limiting.length ? '' : reasons.length ? 'clocked down because nothing is using it' : 'no limit is active right now');
+  const limitVal = $(`${id}-limit-val`);
+  if (limitVal) limitVal.classList.toggle('is-warn', limiting.some((r) => /thermal|slowdown|brake/i.test(r)));
+
+  const pstateTag = $(`${id}-pstate`);
+  if (pstateTag) pstateTag.textContent = card.pstate ? `P-state ${card.pstate}` : 'P-state —';
+}
+
+function renderGpu() {
+  const body = $('gpu-body');
+  const banner = $('gpu-banner');
+  banner.replaceChildren();
+  const data = state.gpu.data;
+  if (!data) {
+    body.replaceChildren(empty('Reading the graphics card…'));
+    return;
+  }
+  body.replaceChildren();
+  state.gpu.fanIcons = [];
+  for (const card of data.cards) body.append(gpuCard(card, data.limits, data.nvflash));
+  for (const a of data.others) body.append(otherGpuCard(a, data.nvidia));
+  if (!data.cards.length && !data.others.length) body.append(empty('No graphics card found.'));
+  for (const card of data.cards) applyGpuSample(card);
+
+  const manualCards = data.cards.filter((c) => c.fan.manual);
+  if (manualCards.length) {
+    const b = el('div', 'ar-summary is-warn');
+    b.append(el('div', 'ar-summary-lead', `Fan on manual: ${manualCards.map((c) => `${c.name} at ${c.fan.target}%`).join(', ')}`));
+    b.append(el('div', 'ar-summary-sub', `It won't speed up with temperature until you switch back to Automatic — BOB does that itself at ${data.limits.watchdogTemp}°C or when it closes.`));
+    banner.append(b);
+  }
+
+  const n = data.cards.length + data.others.length;
+  $('gpu-subtitle').textContent = data.cards.length
+    ? `${n} graphics card${n === 1 ? '' : 's'} · updating every 2s`
+    : 'Live temperature, fan and power — with fan and power-limit controls.';
+}
+
+// The 2s sample carries only live readings; the VBIOS read-out comes once with
+// the full status, so keep it on each card across samples.
+function withVbios(cards) {
+  const prev = new Map(((state.gpu.data && state.gpu.data.cards) || []).map((c) => [c.uuid, c.vbios]));
+  return cards.map((c) => ({ ...c, vbios: c.vbios || prev.get(c.uuid) }));
+}
+
+async function gpuAction(fn, okMessage, confirmOpts) {
+  if (state.gpu.busy) return;
+  if (confirmOpts && !(await confirmAction(confirmOpts))) return;
+  state.gpu.busy = true;
+  renderGpu();
+  try {
+    await fn();
+    toast(okMessage, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.gpu.busy = false;
+    try {
+      const s = await window.pc.gpu.sample();
+      if (state.gpu.data) state.gpu.data.cards = withVbios(s.cards);
+      // Re-derive the segmented control from what the card is really doing.
+      for (const c of s.cards) state.gpu.fanMode[c.bus] = c.fan.manual ? 'manual' : 'auto';
+    } catch {
+      /* keep what we had */
+    }
+    renderGpu();
+  }
+}
+
+// True if the card set or anything the controls are built from has changed, in
+// which case the structure is rebuilt rather than patched.
+function gpuStructureChanged(prev, next) {
+  if (!prev || prev.length !== next.length) return true;
+  return next.some((c, i) => {
+    const p = prev[i];
+    return p.bus !== c.bus || p.fan.manual !== c.fan.manual || p.fan.supported !== c.fan.supported
+      || Math.round(p.power.limit || 0) !== Math.round(c.power.limit || 0);
+  });
+}
+
+async function pollGpu() {
+  if (!state.gpu.active) return;
+  try {
+    if (!state.gpu.data) {
+      state.gpu.data = await window.pc.gpu.status();
+      if (state.gpu.active) renderGpu();
+    } else if (!state.gpu.busy) {
+      const s = await window.pc.gpu.sample();
+      if (state.gpu.active && !state.gpu.busy) {
+        const rebuild = gpuStructureChanged(state.gpu.data.cards, s.cards);
+        state.gpu.data.cards = withVbios(s.cards);
+        if (rebuild) renderGpu();
+        else for (const c of s.cards) applyGpuSample(c);
+      }
+    }
+    if (state.gpu.active) $('gpu-live').hidden = !(state.gpu.data && state.gpu.data.cards.length);
+  } catch (error) {
+    if (state.gpu.active) {
+      $('gpu-subtitle').textContent = `Paused: ${error.message}`;
+      if (!state.gpu.data) $('gpu-body').replaceChildren(empty(error.message));
+    }
+  }
+  if (state.gpu.active) state.gpu.timer = setTimeout(pollGpu, 2000);
+}
+
+function startGpu() {
+  if (state.gpu.active) return;
+  state.gpu.active = true;
+  state.gpu.lastFrame = 0;
+  if (!state.gpu.raf) state.gpu.raf = requestAnimationFrame(gpuSpinFrame);
+  pollGpu();
+}
+
+function stopGpu() {
+  state.gpu.active = false;
+  clearTimeout(state.gpu.timer);
+  $('gpu-live').hidden = true;
+}
+
+window.pc.gpu.onAlert((a) => {
+  toast(a.message, 'error');
+  state.gpu.fanMode[a.bus] = 'auto';
+  if (state.gpu.active && state.gpu.data) {
+    window.pc.gpu.sample().then((s) => {
+      state.gpu.data.cards = withVbios(s.cards);
+      renderGpu();
+    }).catch(() => {});
+  }
+});
 
 /* Devices ------------------------------------------------------------------ */
 

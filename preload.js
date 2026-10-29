@@ -82,6 +82,22 @@ contextBridge.exposeInMainWorld('pc', {
     restartExplorer: () => call('tweaks:restartExplorer'),
   },
 
+  gpu: {
+    status: () => call('gpu:status'),
+    sample: () => call('gpu:sample'),
+    setPowerLimit: (index, watts) => call('gpu:setPowerLimit', index, watts),
+    resetPowerLimit: (index) => call('gpu:resetPowerLimit', index),
+    setFan: (bus, level) => call('gpu:setFan', bus, level),
+    fanAuto: (bus) => call('gpu:fanAuto', bus),
+    backupVbios: (index, suggestedName) => call('gpu:backupVbios', index, suggestedName),
+    locateNvflash: () => call('gpu:locateNvflash'),
+    onAlert: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('gpu:alert', listener);
+      return () => ipcRenderer.removeListener('gpu:alert', listener);
+    },
+  },
+
   bitlocker: {
     status: () => call('bitlocker:status'),
     suspend: (mount) => call('bitlocker:suspend', mount),

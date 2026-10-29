@@ -37,6 +37,7 @@ const report = require('./src/report');
 const tweaks = require('./src/tweaks');
 const bitlocker = require('./src/bitlocker');
 const update = require('./src/update');
+const gpu = require('./src/gpu');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -191,6 +192,34 @@ handle('report:open', async () => {
 handle('tweaks:galleryStatus', () => tweaks.galleryStatus());
 handle('tweaks:setGalleryHidden', (hidden) => tweaks.setGalleryHidden(hidden));
 handle('tweaks:restartExplorer', () => tweaks.restartExplorer());
+handle('gpu:status', () => gpu.status());
+handle('gpu:sample', () => gpu.sample());
+handle('gpu:setPowerLimit', (index, watts) => gpu.setPowerLimit(index, watts));
+handle('gpu:resetPowerLimit', (index) => gpu.resetPowerLimit(index));
+handle('gpu:setFan', (bus, level) => gpu.setFan(bus, level));
+handle('gpu:fanAuto', (bus) => gpu.fanAuto(bus));
+gpu.setAlertHandler(progress('gpu:alert'));
+handle('gpu:backupVbios', async (index, suggestedName) => {
+  const win = BrowserWindow.getAllWindows()[0];
+  const safe = String(suggestedName || 'VBIOS').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').trim() || 'VBIOS';
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Save a backup of the VBIOS',
+    defaultPath: path.join(os.homedir(), 'Desktop', `${safe}.rom`),
+    filters: [{ name: 'VBIOS image', extensions: ['rom'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  return gpu.backupVbios(index, result.filePath);
+});
+handle('gpu:locateNvflash', async () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Locate nvflash',
+    properties: ['openFile'],
+    filters: [{ name: 'nvflash', extensions: ['exe'] }],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+  return gpu.setNvflashPath(result.filePaths[0]);
+});
 handle('bitlocker:status', () => bitlocker.status());
 handle('bitlocker:suspend', (mount) => bitlocker.suspend(mount));
 handle('bitlocker:resume', (mount) => bitlocker.resume(mount));
@@ -273,7 +302,16 @@ app.whenReady().then(() => {
   ps.warmUp();
 });
 
-app.on('will-quit', () => {
+// A card left on a fixed fan speed with BOB gone has nobody watching its
+// temperature, so hand every manual fan back to the driver before quitting.
+let gpuReleased = false;
+app.on('will-quit', (event) => {
+  if (!gpuReleased && gpu.hasManual()) {
+    event.preventDefault();
+    gpuReleased = true;
+    gpu.restoreAll().finally(() => app.quit());
+    return;
+  }
   network.stopAll();
   repair.stopAll();
   ps.dispose();

@@ -76,6 +76,9 @@
           <button class="nav-item" data-view="monitor">
             <span class="nav-dot"></span>Performance
           </button>
+          <button class="nav-item" data-view="gpu">
+            <span class="nav-dot"></span>Graphics card
+          </button>
           <button class="nav-item" data-view="battery">
             <span class="nav-dot"></span>Battery
           </button>
@@ -428,6 +431,23 @@
               <div class="group-title">Top by memory</div>
               <div class="list" id="monitor-mem"></div>
             </div>
+          </div>
+        </section>
+
+        <!-- Graphics card -->
+        <section class="view" id="view-gpu">
+          <header class="view-head">
+            <div>
+              <h1>Graphics card</h1>
+              <p class="subtitle" id="gpu-subtitle">Live temperature, fan and power — with fan and power-limit controls.</p>
+            </div>
+            <div class="head-actions">
+              <span class="live-dot" id="gpu-live" hidden>● live</span>
+            </div>
+          </header>
+          <div id="gpu-banner"></div>
+          <div id="gpu-body">
+            <div class="empty">Reading the graphics card…</div>
           </div>
         </section>
 

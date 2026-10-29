@@ -19,9 +19,9 @@ const os = require('os');
 const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
+const settings = require('./settings');
 const { spawn } = require('child_process');
 
-const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 const isUrl = (s) => /^https?:\/\//i.test(String(s || ''));
 
 // Where updates come from unless the user overrides it in the Update tab. Points
@@ -41,22 +41,8 @@ const APP_VERSION = (() => {
   }
 })();
 
-function readSettings() {
-  try {
-    return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeSettings(settings) {
-  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-}
-
 function getConfig() {
-  const s = readSettings();
-  const custom = (s.updateSource || '').trim();
+  const custom = (settings.get('updateSource') || '').trim();
   return {
     source: custom || DEFAULT_SOURCE,
     isDefault: !custom,
@@ -66,9 +52,7 @@ function getConfig() {
 }
 
 function setSource(source) {
-  const s = readSettings();
-  s.updateSource = String(source || '').trim();
-  writeSettings(s);
+  settings.set('updateSource', String(source || '').trim());
   return getConfig();
 }
 
