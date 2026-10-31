@@ -229,12 +229,15 @@ $gpus = @(Get-CimInstance Win32_VideoController | Where-Object { $_.PNPDeviceID 
 `;
 
 async function facts() {
-  const [base, hw, cards] = await Promise.all([
+  const [base, hw, drv, cards] = await Promise.all([
     ps.json(FACTS_SCRIPT),
     ps.json(HW_FACTS_SCRIPT),
+    ps.json(DRIVER_FACTS_SCRIPT).catch(() => null),
     gpu.sample().then((s) => s.cards).catch(() => []),
   ]);
-  const f = { ...(base || {}), ...(hw || {}), nvidiaCards: cards };
+  const f = { ...(base || {}), ...(hw || {}), ...(drv || {}), nvidiaCards: cards };
+  f.drivers = ps.arr(f.drivers);
+  f.missing = ps.arr(f.missing);
   f.ram = ps.arr(f.ram);
   f.disks = ps.arr(f.disks);
   f.gpus = ps.arr(f.gpus);
@@ -505,14 +508,6 @@ function hardwareSuggestions(f) {
       info({ id: `hw-gpu-hot-${c.index}`, impact: 'Medium', title: `${c.name} is ${c.temp}°C while idle`, detail: 'A graphics card normally idles around 30–50°C. Check its fans spin and clean out dust before it starts throttling under load.' });
     }
   }
-  for (const g of f.gpus) {
-    const date = Date.parse(g.date);
-    if (!Number.isFinite(date)) continue;
-    const months = Math.floor((Date.now() - date) / (30.44 * 86400000));
-    if (months >= 12 && !/microsoft basic/i.test(g.name)) {
-      info({ id: `hw-gpu-driver-${g.name}`, impact: 'Medium', title: `${g.name} driver is ${months >= 24 ? `${Math.floor(months / 12)} years` : `${months} months`} old`, detail: `Driver ${g.version}. New graphics drivers regularly fix bugs and add game optimisations — get the latest from the card maker's site (NVIDIA app, AMD Software, Intel Driver & Support Assistant).` });
-    }
-  }
   // Hardware-accelerated GPU scheduling: Windows 10 2004+ on NVIDIA Pascal or
   // newer, or AMD RX 5000 or newer.
   const hagsCapable = f.build >= 19041 && f.gpus.some((g) => /pascal|volta|turing|ampere|ada|hopper|blackwell/i.test(nvidiaArch(g.name)) || /radeon.*rx\s*[5-9]\d{3}/i.test(g.name));
@@ -631,6 +626,158 @@ function moreSettingSuggestions(f) {
   return out;
 }
 
+/* Drivers ------------------------------------------------------------------------ */
+
+// Third-party network, Wi-Fi, Bluetooth and audio drivers, plus Intel ME, with
+// the PC's maker/model so the advice can link to the right download page.
+// Microsoft's own drivers are left out: their dates are deliberately old.
+const DRIVER_FACTS_SCRIPT = `
+$ErrorActionPreference = 'SilentlyContinue'
+$cs = Get-CimInstance Win32_ComputerSystem
+$bb = Get-CimInstance Win32_BaseBoard
+$bios = Get-CimInstance Win32_BIOS
+$drivers = @(Get-CimInstance Win32_PnPSignedDriver | Where-Object {
+  $_.DeviceName -and $_.DriverProviderName -and $_.DriverDate -and $_.DriverProviderName -notmatch '^Microsoft' -and
+  (@('NET', 'MEDIA', 'BLUETOOTH') -contains [string]$_.DeviceClass -or ([string]$_.DeviceClass -eq 'SYSTEM' -and $_.DeviceName -match 'Management Engine'))
+} | ForEach-Object {
+  [pscustomobject]@{ name = ([string]$_.DeviceName).Trim(); cls = [string]$_.DeviceClass; provider = [string]$_.DriverProviderName; date = $_.DriverDate.ToString('o'); version = [string]$_.DriverVersion }
+})
+$missing = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -eq 28 -and $_.Present -ne $false } | ForEach-Object { $(if ($_.Name) { [string]$_.Name } else { 'Unknown device' }) })
+[pscustomobject]@{
+  sysMaker = ([string]$cs.Manufacturer).Trim(); sysModel = ([string]$cs.Model).Trim()
+  boardMaker = ([string]$bb.Manufacturer).Trim(); boardModel = ([string]$bb.Product).Trim()
+  serial = ([string]$bios.SerialNumber).Trim(); biosVersion = ([string]$bios.SMBIOSBIOSVersion).Trim()
+  biosDate = $(if ($bios.ReleaseDate) { $bios.ReleaseDate.ToString('o') } else { '' })
+  drivers = $drivers; missing = $missing
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+
+// Virtual and software devices whose drivers come with an app, not the hardware.
+const DRIVER_SKIP = /virtual|streaming|host-only|emulat|xvdd|vmware|virtualbox|hyper-v|wan miniport|tap-windows|wireguard|vpn|oculus|meta |nvidia high definition|amd high definition|nvidia virtual/i;
+
+const OPTIONAL_UPDATES = { label: 'Windows Update — optional driver updates', url: 'ms-settings:windowsupdate-optionalupdates' };
+const INTEL_DSA = { label: 'Intel Driver & Support Assistant', url: 'https://www.intel.com/content/www/us/en/support/detect.html' };
+
+function gpuLinks(name) {
+  if (/nvidia/i.test(name)) {
+    return [
+      { label: 'NVIDIA driver downloads', url: 'https://www.nvidia.com/en-us/drivers/' },
+      { label: 'NVIDIA app (keeps it updated)', url: 'https://www.nvidia.com/en-us/software/nvidia-app/' },
+    ];
+  }
+  if (/amd|radeon/i.test(name)) return [{ label: 'AMD driver downloads', url: 'https://www.amd.com/en/support/download/drivers.html' }];
+  if (/intel/i.test(name)) return [INTEL_DSA];
+  return [];
+}
+
+const webSearch = (q) => ({ label: `Search: ${q}`, url: `https://www.google.com/search?q=${encodeURIComponent(q)}` });
+const GENERIC_MAKER = /^$|system manufacturer|system product|to be filled|default string|o\.?e\.?m|not applicable/i;
+
+// The page a tech actually wants: the PC maker's driver page for a branded PC,
+// the motherboard maker's page for this exact board on a custom build.
+function makerLinks(f) {
+  const sys = f.sysMaker || '';
+  const model = f.sysModel || '';
+  const tag = f.serial && !GENERIC_MAKER.test(f.serial) ? f.serial : '';
+  if (/dell/i.test(sys)) return [{ label: `Dell drivers${tag ? ` — service tag ${tag}` : ''}`, url: 'https://www.dell.com/support/home/en-us?app=drivers' }];
+  if (/hewlett|^hp\b/i.test(sys)) return [{ label: `HP drivers${tag ? ` — serial ${tag}` : ''}`, url: 'https://support.hp.com/drivers' }];
+  if (/lenovo/i.test(sys)) return [{ label: `Lenovo support${tag ? ` — serial ${tag}` : ''}`, url: 'https://pcsupport.lenovo.com/' }];
+  if (/acer/i.test(sys)) return [{ label: `Acer drivers${tag ? ` — serial ${tag}` : ''}`, url: 'https://www.acer.com/us-en/support/drivers-and-manuals' }];
+  if (/microsoft/i.test(sys) && /surface/i.test(model)) return [{ label: 'Surface drivers and firmware', url: 'https://support.microsoft.com/en-us/surface/download-drivers-and-firmware-for-surface-09bb2e09-2a4b-cb69-0951-078a7739e120' }];
+  if (/asus/i.test(sys) && model && !GENERIC_MAKER.test(model)) return [{ label: `ASUS ${model} drivers & BIOS`, url: `https://www.asus.com/supportonly/${encodeURIComponent(model)}/HelpDesk_Download/` }];
+  if (/micro-star|^msi\b/i.test(sys) && model && !GENERIC_MAKER.test(model)) return [{ label: `MSI ${model} drivers & BIOS`, url: `https://www.msi.com/search/${encodeURIComponent(model.replace(/\s*\(MS-\w+\)\s*$/i, ''))}` }];
+
+  // Custom build (or a builder like PC Specialist): go by the motherboard.
+  const board = (f.boardModel || '').replace(/\s*\(MS-\w+\)\s*$/i, '');
+  const bm = f.boardMaker || '';
+  if (!board || GENERIC_MAKER.test(board)) return GENERIC_MAKER.test(sys) || !model ? [] : [webSearch(`${sys} ${model} drivers`)];
+  if (/asus/i.test(bm)) return [{ label: `ASUS ${board} drivers & BIOS`, url: `https://www.asus.com/supportonly/${encodeURIComponent(board)}/HelpDesk_Download/` }];
+  if (/micro-star|^msi\b/i.test(bm)) return [{ label: `MSI ${board} drivers & BIOS`, url: `https://www.msi.com/search/${encodeURIComponent(board)}` }];
+  if (/gigabyte/i.test(bm)) return [{ label: 'Gigabyte support', url: 'https://www.gigabyte.com/Support' }, webSearch(`Gigabyte ${board} drivers`)];
+  if (/asrock/i.test(bm)) return [{ label: 'ASRock support', url: 'https://www.asrock.com/support/index.asp?cat=Download' }, webSearch(`ASRock ${board} drivers`)];
+  return [webSearch(`${bm} ${board} drivers`)];
+}
+
+function makerName(f) {
+  const links = makerLinks(f);
+  const m = links.length && /^(Dell|HP|Lenovo|Acer|Surface|ASUS|MSI|Gigabyte|ASRock)/.exec(links[0].label);
+  return m ? (m[1] === 'Surface' ? 'Microsoft' : m[1]) : 'the PC or motherboard maker';
+}
+
+const monthYear = (iso) => new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+const monthsSince = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? Math.floor((Date.now() - t) / (30.44 * 86400000)) : null;
+};
+const ageText = (months) => (months >= 24 ? `${Math.floor(months / 12)} years` : `${months} months`);
+
+function driverKind(d) {
+  if (d.cls === 'NET') return /wireless|wi-?fi|wlan|802\.11/i.test(d.name) ? 'Wi-Fi' : 'network';
+  if (d.cls === 'MEDIA') return 'audio';
+  if (d.cls === 'BLUETOOTH') return 'Bluetooth';
+  return 'system';
+}
+
+function driverSuggestions(f) {
+  const out = [];
+  const info = (s) => out.push(suggestion({ category: 'Drivers', actionable: false, ...s }));
+
+  for (const g of f.gpus) {
+    const months = monthsSince(g.date);
+    if (months == null || months < 12 || /microsoft basic/i.test(g.name)) continue;
+    info({
+      id: `driver-gpu-${g.name}`,
+      impact: 'Medium',
+      title: `${g.name} driver is ${ageText(months)} old`,
+      detail: `Installed: ${g.version}, from ${monthYear(g.date)}. New graphics drivers regularly fix bugs and add game optimisations.`,
+      links: gpuLinks(g.name),
+    });
+  }
+
+  const old = (f.drivers || [])
+    .filter((d) => !DRIVER_SKIP.test(d.name) && !DRIVER_SKIP.test(d.provider))
+    .map((d) => ({ ...d, months: monthsSince(d.date) }))
+    // Dates before 2000 are placeholders some vendors use, not real ages.
+    .filter((d) => d.months != null && d.months >= 36 && new Date(d.date).getFullYear() >= 2000)
+    .sort((a, b) => b.months - a.months);
+  const seen = new Set();
+  const unique = old.filter((d) => (seen.has(d.name) ? false : (seen.add(d.name), true)));
+  if (unique.length) {
+    const links = [...makerLinks(f)];
+    if (unique.some((d) => /intel/i.test(d.provider))) links.push(INTEL_DSA);
+    links.push(OPTIONAL_UPDATES);
+    info({
+      id: 'driver-old',
+      impact: 'Medium',
+      title: `${unique.length} device driver${unique.length === 1 ? ' is' : 's are'} over 3 years old`,
+      detail: `${unique.map((d) => `${d.name} (${driverKind(d)}, ${monthYear(d.date)})`).join('; ')}. Newer versions usually fix connection drops, crackling audio and sleep problems — get them from ${makerName(f)}${unique.some((d) => /intel/i.test(d.provider)) ? ' or Intel' : ''}, or Windows Update's optional updates.`,
+      links,
+    });
+  }
+
+  const missing = f.missing || [];
+  if (missing.length) {
+    info({
+      id: 'driver-missing',
+      impact: 'High',
+      title: `${missing.length} device${missing.length === 1 ? ' has' : 's have'} no driver`,
+      detail: `${missing.slice(0, 6).join('; ')}${missing.length > 6 ? `; and ${missing.length - 6} more` : ''}. Without a driver the device does not work at all — the Devices tab lists them under “needs attention”.`,
+      links: [...makerLinks(f), OPTIONAL_UPDATES],
+    });
+  }
+
+  const biosMonths = monthsSince(f.biosDate);
+  if (biosMonths != null && biosMonths >= 48) {
+    info({
+      id: 'driver-bios',
+      title: `The BIOS is ${ageText(biosMonths)} old (version ${f.biosVersion}, ${monthYear(f.biosDate)})`,
+      detail: 'BIOS updates fix stability, security (processor microcode) and compatibility problems. Only update with a reason, and follow the maker’s instructions exactly — a BIOS update that fails part-way can stop the PC starting.',
+      links: makerLinks(f),
+    });
+  }
+  return out;
+}
+
 function adviceItems(f, entries) {
   const out = [];
   const info = (s) => out.push(suggestion({ actionable: false, category: 'Advice', ...s }));
@@ -690,6 +837,7 @@ async function build(onProgress) {
     ...powerSuggestions(f),
     ...hardwareSuggestions(f),
     ...displaySuggestions(f),
+    ...driverSuggestions(f),
     ...startupSuggestions(entries),
     ...settingSuggestions(f),
     ...moreSettingSuggestions(f),
@@ -1004,4 +1152,4 @@ function changes() {
   return changesLog().map(publicChange);
 }
 
-module.exports = { scan, apply, undo, undoAll, changes, _internals: { facts, build, applyOne, revert, STARTUP_KNOWN, setRegistry, restoreRegistry, ratedSpeed, hardwareSuggestions, displaySuggestions, moreSettingSuggestions, setDisplay, setProcMax } };
+module.exports = { scan, apply, undo, undoAll, changes, _internals: { facts, build, applyOne, revert, STARTUP_KNOWN, setRegistry, restoreRegistry, ratedSpeed, hardwareSuggestions, displaySuggestions, driverSuggestions, makerLinks, moreSettingSuggestions, setDisplay, setProcMax } };

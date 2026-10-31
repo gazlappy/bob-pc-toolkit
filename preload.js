@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('pc', {
   system: () => call('system:info'),
   keys: () => call('keys:read'),
   copyText: (text) => call('sys:copy', text),
+  openLink: (url) => call('sys:openLink', url),
 
   net: {
     info: () => call('net:info'),

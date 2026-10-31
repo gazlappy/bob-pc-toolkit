@@ -295,6 +295,21 @@ handle('startup:reveal', (id) => startup.reveal(id));
 handle('task:setEnabled', (taskPath, name, enabled) => startup.setTaskEnabled(taskPath, name, enabled));
 
 handle('clean:scan', () => clean.scan(progress('clean:progress')));
+// Links shown in BOB (driver downloads and the like) open only if they go to a
+// known vendor site over https, or to Windows Update's own settings pages.
+const LINK_HOSTS = /(^|\.)(nvidia\.com|amd\.com|intel\.com|asus\.com|msi\.com|gigabyte\.com|asrock\.com|dell\.com|hp\.com|lenovo\.com|acer\.com|microsoft\.com|google\.com)$/i;
+handle('sys:openLink', async (url) => {
+  const u = String(url || '');
+  if (/^ms-settings:windowsupdate(-optionalupdates)?$/i.test(u)) return shell.openExternal(u);
+  let parsed;
+  try {
+    parsed = new URL(u);
+  } catch {
+    throw new Error('That link is not valid.');
+  }
+  if (parsed.protocol !== 'https:' || !LINK_HOSTS.test(parsed.hostname)) throw new Error('BOB only opens links to known driver and support sites.');
+  return shell.openExternal(parsed.href);
+});
 handle('tuneup:scan', () => tuneup.scan(progress('tuneup:progress')));
 handle('tuneup:apply', (ids) => tuneup.apply(Array.isArray(ids) ? ids : [], progress('tuneup:progress')));
 handle('tuneup:undo', (key) => tuneup.undo(key));

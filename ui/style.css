@@ -1512,6 +1512,33 @@ select:focus {
   color: var(--warn);
 }
 
+.tune-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tune-link {
+  border: 1px solid var(--accent-dim);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.tune-link::after {
+  content: ' ↗';
+}
+
+.tune-link:hover {
+  background: var(--accent-dim);
+  color: #cfe0ff;
+}
+
 .tune-changes-head {
   display: flex;
   align-items: center;

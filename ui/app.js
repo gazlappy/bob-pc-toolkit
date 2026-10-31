@@ -768,9 +768,10 @@ $('cleanup-run').addEventListener('click', async () => {
 
 /* Tune-up ------------------------------------------------------------------ */
 
-const TUNE_GROUPS = ['Power', 'Hardware', 'Display', 'Startup', 'Windows settings', 'Storage', 'Advice'];
+const TUNE_GROUPS = ['Power', 'Hardware', 'Display', 'Drivers', 'Startup', 'Windows settings', 'Storage', 'Advice'];
 const TUNE_GROUP_BLURB = {
   Hardware: 'Memory, processor, graphics and drives. The ones without a tick box need a hand in the BIOS or a part swapped.',
+  Drivers: 'BOB does not install drivers itself — each link opens the right download page for this PC.',
   Advice: 'Things BOB cannot change for you, but worth knowing.',
 };
 
@@ -864,6 +865,28 @@ function tuneupRow(s) {
   desc.className = 'clean-desc';
   desc.textContent = s.detail;
   body.append(name, desc);
+  if (s.links && s.links.length) {
+    const links = document.createElement('div');
+    links.className = 'tune-links';
+    for (const l of s.links) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tune-link';
+      b.textContent = l.label;
+      b.title = l.url;
+      b.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          await window.pc.openLink(l.url);
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+      links.append(b);
+    }
+    body.append(links);
+  }
 
   const impact = document.createElement('div');
   impact.className = `tune-impact impact-${s.impact.toLowerCase()}`;
