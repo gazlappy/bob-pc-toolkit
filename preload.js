@@ -82,6 +82,19 @@ contextBridge.exposeInMainWorld('pc', {
     restartExplorer: () => call('tweaks:restartExplorer'),
   },
 
+  tuneup: {
+    scan: () => call('tuneup:scan'),
+    apply: (ids) => call('tuneup:apply', ids),
+    undo: (key) => call('tuneup:undo', key),
+    undoAll: () => call('tuneup:undoAll'),
+    changes: () => call('tuneup:changes'),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('tuneup:progress', listener);
+      return () => ipcRenderer.removeListener('tuneup:progress', listener);
+    },
+  },
+
   gpu: {
     status: () => call('gpu:status'),
     sample: () => call('gpu:sample'),

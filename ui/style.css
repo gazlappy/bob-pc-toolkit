@@ -1420,6 +1420,152 @@ select:focus {
   font-size: 11px;
 }
 
+.clean-meta {
+  color: var(--warn);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.clean-also {
+  color: var(--faint);
+  font-size: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.clean-also:first-child {
+  border-top: 0;
+}
+
+.clean-report {
+  position: relative;
+}
+
+/* Tune-up */
+.tune-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tune-fact {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 10px 14px;
+  min-width: 0;
+}
+
+.tune-fact-label {
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.tune-fact-value {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tune-impact {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  min-width: 92px;
+  text-align: right;
+  color: var(--faint);
+}
+
+.tune-impact.impact-high {
+  color: var(--good);
+}
+
+.tune-impact.impact-medium {
+  color: var(--accent);
+}
+
+.tune-row.is-advice .tune-impact.impact-high {
+  color: var(--warn);
+}
+
+.tune-advice-dot {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-style: italic;
+  display: grid;
+  place-items: center;
+}
+
+.tune-advice-dot.impact-high {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.tune-changes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 22px;
+}
+
+.tune-change {
+  align-items: center;
+}
+
+.progress-fill.is-indeterminate {
+  width: 35% !important;
+  animation: tune-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes tune-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill.is-indeterminate {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.5;
+  }
+}
+
+.clean-report-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.clean-report-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.clean-report-line .is-warn {
+  color: var(--warn);
+}
+
+.clean-report-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
 .group-blurb {
   color: var(--muted);
   font-size: 12.5px;

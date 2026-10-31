@@ -38,6 +38,7 @@ const tweaks = require('./src/tweaks');
 const bitlocker = require('./src/bitlocker');
 const update = require('./src/update');
 const gpu = require('./src/gpu');
+const tuneup = require('./src/tuneup');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -46,6 +47,19 @@ const gpu = require('./src/gpu');
 app.setName('PC Cleanup');
 
 let win = null;
+
+// One BOB at a time: launching it again brings the running one to the front
+// instead of starting a second copy alongside it.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', () => revealWindow());
+
+function revealWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -77,7 +91,21 @@ function createWindow() {
   win.webContents.session.setPermissionCheckHandler((_wc, permission) => allowMedia(permission));
 
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  // Shown on ready-to-show to avoid a blank flash, with two backstops: a timer in
+  // case that event never comes, and a second show if the first was swallowed —
+  // a BOB relaunched by the self-updater was left running with a hidden window,
+  // which then blocked every later launch until it was killed.
+  let shown = false;
+  const reveal = () => {
+    if (shown || !win || win.isDestroyed()) return;
+    shown = true;
+    win.show();
+    setTimeout(() => {
+      if (win && !win.isDestroyed() && !win.isVisible()) revealWindow();
+    }, 500);
+  };
+  win.once('ready-to-show', reveal);
+  setTimeout(reveal, 4000);
   win.on('closed', () => {
     win = null;
   });
@@ -267,6 +295,11 @@ handle('startup:reveal', (id) => startup.reveal(id));
 handle('task:setEnabled', (taskPath, name, enabled) => startup.setTaskEnabled(taskPath, name, enabled));
 
 handle('clean:scan', () => clean.scan(progress('clean:progress')));
+handle('tuneup:scan', () => tuneup.scan(progress('tuneup:progress')));
+handle('tuneup:apply', (ids) => tuneup.apply(Array.isArray(ids) ? ids : [], progress('tuneup:progress')));
+handle('tuneup:undo', (key) => tuneup.undo(key));
+handle('tuneup:undoAll', () => tuneup.undoAll());
+handle('tuneup:changes', () => tuneup.changes());
 handle('clean:run', (ids) => clean.clean(Array.isArray(ids) ? ids : [], progress('clean:progress')));
 
 handle('files:roots', () => files.availableRoots());
@@ -296,6 +329,7 @@ handle('backup:remove', (id) => backup.remove(id));
 handle('backup:reveal', (id) => backup.reveal(id));
 
 app.whenReady().then(() => {
+  if (!gotLock) return;
   createWindow();
   // Pay PowerShell's ~1.4s cold start now, while the window is still painting,
   // rather than on the user's first click.

@@ -26,6 +26,10 @@
           </button>
 
           <div class="nav-group-label">Clean up</div>
+          <button class="nav-item" data-view="tuneup">
+            <span class="nav-dot"></span>Tune-up
+            <span class="nav-count" id="nav-tuneup-count"></span>
+          </button>
           <button class="nav-item" data-view="cleanup">
             <span class="nav-dot"></span>Cleanup
             <span class="nav-count" id="nav-cleanup-count"></span>
@@ -250,6 +254,7 @@
             </div>
           </div>
 
+          <div id="cleanup-report" hidden></div>
           <div id="cleanup-groups"></div>
         </section>
 
@@ -432,6 +437,41 @@
               <div class="list" id="monitor-mem"></div>
             </div>
           </div>
+        </section>
+
+        <!-- Tune-up -->
+        <section class="view" id="view-tuneup">
+          <header class="view-head">
+            <div>
+              <h1>Tune-up</h1>
+              <p class="subtitle" id="tuneup-subtitle">Check how this PC is set up and what it runs, then fix what slows it down.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-primary" id="tuneup-scan">Scan PC</button>
+            </div>
+          </header>
+
+          <div class="progress" id="tuneup-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill is-indeterminate" id="tuneup-progress-fill"></div></div>
+            <div class="progress-label" id="tuneup-progress-label"></div>
+          </div>
+
+          <div class="tune-summary" id="tuneup-summary" hidden></div>
+
+          <div class="selection-bar" id="tuneup-selection" hidden>
+            <span id="tuneup-selection-text"></span>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-small" id="tuneup-select-recommended">Select recommended</button>
+              <button class="btn btn-ghost btn-small" id="tuneup-select-none">Clear</button>
+              <button class="btn btn-primary btn-small" id="tuneup-apply" disabled>Do it for me</button>
+            </div>
+          </div>
+
+          <div id="tuneup-report" hidden></div>
+          <div id="tuneup-groups">
+            <div class="empty">Scan to see what can be improved.</div>
+          </div>
+          <div id="tuneup-changes"></div>
         </section>
 
         <!-- Graphics card -->

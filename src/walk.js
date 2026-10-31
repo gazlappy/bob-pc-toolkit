@@ -94,9 +94,16 @@ async function walk(root, visit, options = {}) {
   return { entries, truncated };
 }
 
-/** Total bytes and file count beneath `target`, or its own size if it is a file. */
+// Latest of a file's modified and created times. Created matters: an archive
+// extracted a minute ago keeps the old modified dates of what was packed.
+const touched = (stats) => Math.max(stats.mtimeMs || 0, stats.birthtimeMs || 0);
+
+/**
+ * Total bytes and file count beneath `target`, or its own size if it is a file,
+ * plus `newest`: the most recent time anything in it was created or modified.
+ */
 async function measure(target) {
-  const totals = { bytes: 0, files: 0 };
+  const totals = { bytes: 0, files: 0, newest: 0 };
 
   let stats;
   try {
@@ -105,6 +112,7 @@ async function measure(target) {
     return totals;
   }
 
+  totals.newest = touched(stats);
   if (!stats.isDirectory()) {
     totals.bytes = stats.size;
     totals.files = 1;
@@ -114,9 +122,11 @@ async function measure(target) {
   await walk(target, (_full, fileStats) => {
     totals.bytes += fileStats.size;
     totals.files += 1;
+    const t = touched(fileStats);
+    if (t > totals.newest) totals.newest = t;
   });
 
   return totals;
 }
 
-module.exports = { walk, measure, pool };
+module.exports = { walk, measure, pool, touched };

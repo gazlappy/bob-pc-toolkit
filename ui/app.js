@@ -5,7 +5,8 @@ const $ = (id) => document.getElementById(id);
 const state = {
   admin: false,
   startup: { entries: [], tasks: [], search: '', showWindowsTasks: false, tasksLoaded: false },
-  cleanup: { targets: [], selected: new Set(), scanned: false },
+  tuneup: { suggestions: [], summary: null, changes: [], selected: new Set(), results: null, scanned: false, loaded: false, busy: false, admin: false },
+  cleanup: { targets: [], profiles: [], selected: new Set(), scanned: false, report: null, cleaning: false },
   files: { results: null, selected: new Set(), roots: [], mode: 'list' },
   map: { node: null, trail: [], selected: null, built: false, summary: null },
   registry: { groups: [], selected: new Set(), scanned: false },
@@ -150,6 +151,7 @@ function show(view) {
   if (view === 'report' && !state.report.loaded) loadReport();
   if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
+  if (view === 'tuneup' && !state.tuneup.loaded) loadTuneup();
   if (view === 'update' && !state.update.loaded) loadUpdate();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
@@ -503,14 +505,140 @@ $('tasks-show-windows').addEventListener('change', (event) => {
 
 /* Cleanup ------------------------------------------------------------------ */
 
+// A target can be ticked when it has something to remove and BOB has the rights.
+function cleanupSelectable(target) {
+  return target.bytes > 0 && !target.blocked;
+}
+
 function updateCleanupSelection() {
   const chosen = state.cleanup.targets.filter((target) => state.cleanup.selected.has(target.id));
   const bytes = chosen.reduce((sum, target) => sum + target.bytes, 0);
   const bar = $('cleanup-selection');
 
-  bar.hidden = chosen.length === 0;
-  $('cleanup-selection-text').textContent = `${chosen.length} selected · ${formatBytes(bytes)} to remove`;
+  bar.hidden = !state.cleanup.scanned;
+  $('cleanup-selection-text').textContent = chosen.length
+    ? `${chosen.length} selected · ${formatBytes(bytes)} to remove`
+    : 'Nothing selected';
   $('cleanup-run').disabled = chosen.length === 0;
+}
+
+// "used in the last day" / "in the last 7 days" / "in the last 6 hours"
+function hoursLabel(h) {
+  return h >= 48 ? `${Math.round(h / 24)} days` : h >= 24 ? 'day' : `${h} hours`;
+}
+
+function cleanupRow(target) {
+  const row = document.createElement('label');
+  row.className = `clean-row${cleanupSelectable(target) ? '' : ' is-empty'}`;
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = state.cleanup.selected.has(target.id);
+  input.disabled = !cleanupSelectable(target);
+  input.addEventListener('change', () => {
+    if (input.checked) state.cleanup.selected.add(target.id);
+    else state.cleanup.selected.delete(target.id);
+    updateCleanupSelection();
+  });
+
+  const body = document.createElement('div');
+  body.className = 'clean-body';
+
+  const name = document.createElement('div');
+  name.className = 'clean-name';
+  name.append(document.createTextNode(target.label));
+  const tag = (text, cls) => {
+    const t = document.createElement('span');
+    t.className = `tag ${cls}`;
+    t.textContent = text;
+    name.append(t);
+  };
+  if (target.blocked) tag('Needs administrator', 'tag-warn');
+  if (target.warn) tag('Permanent', 'tag-danger');
+  if (target.optional) tag('Optional', '');
+  if (target.running.length) tag('Open — close it for a full clean', 'tag-warn');
+
+  const desc = document.createElement('div');
+  desc.className = 'clean-desc';
+  desc.textContent = target.apps.length ? `${target.description} Found: ${target.apps.join(', ')}.` : target.description;
+
+  const safety = document.createElement('div');
+  safety.className = 'clean-safety';
+  safety.textContent = target.safety;
+
+  body.append(name, desc, safety);
+
+  const notes = [];
+  if (target.recentBytes > 0) {
+    notes.push(`${formatBytes(target.recentBytes)} left alone — used in the last ${hoursLabel(target.minAgeHours)}.`);
+  }
+  if (target.profiles > 1) notes.push(`Across ${target.profiles} user profiles.`);
+  if (target.note) notes.push(target.note);
+  if (notes.length) {
+    const meta = document.createElement('div');
+    meta.className = 'clean-meta';
+    meta.textContent = notes.join(' ');
+    body.append(meta);
+  }
+
+  const size = document.createElement('div');
+  size.className = 'clean-size';
+  size.textContent = target.bytes ? formatBytes(target.bytes) : '—';
+  if (target.files) {
+    const files = document.createElement('small');
+    files.textContent = `${target.files.toLocaleString('en-GB')} ${target.id === 'recycle-bin' ? 'items' : 'files'}`;
+    size.append(files);
+  }
+
+  row.append(input, body, size);
+  return row;
+}
+
+function renderCleanupReport() {
+  const box = $('cleanup-report');
+  const report = state.cleanup.report;
+  box.replaceChildren();
+  box.hidden = !report;
+  if (!report) return;
+
+  const lead = document.createElement('div');
+  lead.className = 'ar-summary-lead';
+  lead.textContent = `Freed ${formatBytes(report.bytes)} from ${report.files.toLocaleString('en-GB')} files`;
+  const sub = document.createElement('div');
+  sub.className = 'ar-summary-sub';
+  const bits = [];
+  if (report.skipped) bits.push(`${report.skipped.toLocaleString('en-GB')} files were in use and skipped`);
+  if (report.kept) bits.push(`${formatBytes(report.kept)} recently used and left alone`);
+  sub.textContent = bits.length ? `${bits.join(' · ')}.` : 'Everything selected was removed.';
+  box.className = `ar-summary ${report.skipped ? 'is-warn' : 'is-good'} clean-report`;
+  box.append(lead, sub);
+
+  const list = document.createElement('div');
+  list.className = 'clean-report-list';
+  for (const t of report.targets) {
+    const line = document.createElement('div');
+    line.className = 'clean-report-line';
+    const label = document.createElement('span');
+    label.textContent = t.label;
+    const val = document.createElement('span');
+    const parts = [formatBytes(t.bytes)];
+    if (t.skipped) parts.push(`${t.skipped.toLocaleString('en-GB')} in use`);
+    if (t.note) parts.push(t.note);
+    val.textContent = parts.join(' · ');
+    if (t.note || t.skipped) val.className = 'is-warn';
+    line.append(label, val);
+    list.append(line);
+  }
+  box.append(list);
+
+  const close = document.createElement('button');
+  close.className = 'btn btn-ghost btn-small clean-report-close';
+  close.textContent = 'Dismiss';
+  close.addEventListener('click', () => {
+    state.cleanup.report = null;
+    renderCleanupReport();
+  });
+  box.append(close);
 }
 
 function renderCleanup() {
@@ -524,6 +652,11 @@ function renderCleanup() {
   }
 
   for (const [group, targets] of groups) {
+    // Locations with nothing in them are folded into one line, so the list
+    // shows what can be cleaned without hiding what was checked.
+    const shown = targets.filter((t) => t.bytes > 0 || t.recentBytes > 0 || t.note || t.blocked);
+    const emptyOnes = targets.filter((t) => !shown.includes(t));
+
     const title = document.createElement('div');
     title.className = 'group-title';
     title.textContent = group;
@@ -531,70 +664,22 @@ function renderCleanup() {
 
     const list = document.createElement('div');
     list.className = 'list';
-
-    for (const target of targets) {
-      const row = document.createElement('label');
-      row.className = `clean-row${target.bytes === 0 ? ' is-empty' : ''}`;
-
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = state.cleanup.selected.has(target.id);
-      input.disabled = target.bytes === 0 || (target.needsAdmin && !state.admin);
-      input.addEventListener('change', () => {
-        if (input.checked) state.cleanup.selected.add(target.id);
-        else state.cleanup.selected.delete(target.id);
-        updateCleanupSelection();
-      });
-
-      const body = document.createElement('div');
-      body.className = 'clean-body';
-
-      const name = document.createElement('div');
-      name.className = 'clean-name';
-      name.append(document.createTextNode(target.label));
-      if (target.needsAdmin && !state.admin) {
-        const tag = document.createElement('span');
-        tag.className = 'tag tag-warn';
-        tag.textContent = 'Needs administrator';
-        name.append(tag);
-      }
-      if (target.warn) {
-        const tag = document.createElement('span');
-        tag.className = 'tag tag-danger';
-        tag.textContent = 'Permanent';
-        name.append(tag);
-      }
-
-      const desc = document.createElement('div');
-      desc.className = 'clean-desc';
-      desc.textContent = target.description;
-
-      const safety = document.createElement('div');
-      safety.className = 'clean-safety';
-      safety.textContent = target.safety;
-
-      body.append(name, desc, safety);
-
-      const size = document.createElement('div');
-      size.className = 'clean-size';
-      size.textContent = target.bytes ? formatBytes(target.bytes) : '—';
-      if (target.files) {
-        const files = document.createElement('small');
-        files.textContent = `${target.files.toLocaleString('en-GB')} files`;
-        size.append(files);
-      }
-
-      row.append(input, body, size);
-      list.append(row);
+    for (const target of shown) list.append(cleanupRow(target));
+    if (emptyOnes.length) {
+      const also = document.createElement('div');
+      also.className = 'clean-also';
+      also.textContent = `${shown.length ? 'Also checked' : 'Checked'}, nothing to clean: ${emptyOnes.map((t) => t.label).join(', ')}.`;
+      list.append(also);
     }
-
     container.append(list);
   }
 
-  const total = state.cleanup.targets.reduce((sum, target) => sum + target.bytes, 0);
-  $('cleanup-subtitle').textContent = `${formatBytes(total)} can be reclaimed across ${
-    state.cleanup.targets.filter((target) => target.bytes > 0).length
-  } locations.`;
+  const total = state.cleanup.targets.reduce((sum, target) => sum + (target.blocked ? 0 : target.bytes), 0);
+  const where = state.cleanup.targets.filter((target) => target.bytes > 0 && !target.blocked).length;
+  const profiles = state.cleanup.profiles.length;
+  $('cleanup-subtitle').textContent = `${formatBytes(total)} can be reclaimed across ${where} locations${
+    profiles > 1 ? ` in ${profiles} user profiles` : ''
+  }.`;
   $('nav-cleanup-count').textContent = total ? formatBytes(total) : '';
   $('tile-cleanup').textContent = formatBytes(total);
   $('tile-cleanup-note').textContent = 'Reviewed and ready to clean';
@@ -604,7 +689,7 @@ function renderCleanup() {
 window.pc.clean.onProgress(({ index, total, label }) => {
   const percent = total ? (index / total) * 100 : 0;
   $('cleanup-progress-fill').style.width = `${percent}%`;
-  $('cleanup-progress-label').textContent = label === 'Done' ? 'Finishing…' : `Checking ${label}…`;
+  $('cleanup-progress-label').textContent = label === 'Done' ? 'Finishing…' : `${state.cleanup.cleaning ? 'Cleaning' : 'Checking'} ${label}…`;
 });
 
 async function scanCleanup() {
@@ -613,7 +698,9 @@ async function scanCleanup() {
   $('cleanup-progress').hidden = false;
   $('cleanup-groups').replaceChildren();
   try {
-    state.cleanup.targets = await window.pc.clean.scan();
+    const result = await window.pc.clean.scan();
+    state.cleanup.targets = result.targets;
+    state.cleanup.profiles = result.profiles || [];
     state.cleanup.scanned = true;
     state.cleanup.selected.clear();
     renderCleanup();
@@ -627,11 +714,12 @@ async function scanCleanup() {
 
 $('cleanup-scan').addEventListener('click', scanCleanup);
 
+// "Safe" leaves out anything permanent (Recycle Bin, Windows.old) and the
+// optional rows (developer caches, logs, prefetch) a tech should choose on purpose.
 $('cleanup-select-safe').addEventListener('click', () => {
   state.cleanup.selected.clear();
   for (const target of state.cleanup.targets) {
-    const blocked = target.needsAdmin && !state.admin;
-    if (target.bytes > 0 && !target.warn && !blocked) state.cleanup.selected.add(target.id);
+    if (cleanupSelectable(target) && !target.warn && !target.optional) state.cleanup.selected.add(target.id);
   }
   renderCleanup();
 });
@@ -645,37 +733,410 @@ $('cleanup-run').addEventListener('click', async () => {
   const chosen = state.cleanup.targets.filter((target) => state.cleanup.selected.has(target.id));
   if (!chosen.length) return;
   const bytes = chosen.reduce((sum, target) => sum + target.bytes, 0);
-  const hasPermanent = chosen.some((target) => target.warn);
+  const permanent = chosen.filter((target) => target.warn);
+  const open = [...new Set(chosen.flatMap((target) => target.running))];
 
   const ok = await confirmAction({
     title: `Clean ${formatBytes(bytes)}?`,
-    body: `${chosen.map((target) => target.label).join(', ')}. Files in use will be skipped.${
-      hasPermanent ? ' The Recycle Bin is included — that part cannot be undone.' : ''
-    }`,
+    body: `${chosen.map((target) => target.label).join(', ')}. Files in use are skipped.${
+      open.length ? ` ${open.join(', ')} ${open.length === 1 ? 'is' : 'are'} open, so part of ${open.length === 1 ? 'its' : 'their'} cache will be skipped — close ${open.length === 1 ? 'it' : 'them'} first for a full clean.` : ''
+    }${permanent.length ? ` ${permanent.map((t) => t.label).join(' and ')} cannot be undone.` : ''}`,
     confirmLabel: 'Clean now',
-    danger: hasPermanent,
+    danger: permanent.length > 0,
   });
   if (!ok) return;
 
   $('cleanup-run').disabled = true;
   $('cleanup-scan').disabled = true;
   $('cleanup-progress').hidden = false;
+  state.cleanup.cleaning = true;
   try {
-    const report = await window.pc.clean.run([...state.cleanup.selected]);
-    toast(
-      `Freed ${formatBytes(report.bytes)} from ${report.files.toLocaleString('en-GB')} files${
-        report.skipped ? ` · ${report.skipped} in use and skipped` : ''
-      }.`,
-      'good'
-    );
+    state.cleanup.report = await window.pc.clean.run([...state.cleanup.selected]);
+    renderCleanupReport();
+    toast(`Freed ${formatBytes(state.cleanup.report.bytes)}.`, 'good');
+    state.cleanup.cleaning = false;
     await scanCleanup();
     loadOverview();
   } catch (error) {
     toast(error.message, 'error');
   } finally {
+    state.cleanup.cleaning = false;
     $('cleanup-progress').hidden = true;
     $('cleanup-scan').disabled = false;
   }
+});
+
+/* Tune-up ------------------------------------------------------------------ */
+
+const TUNE_GROUPS = ['Power', 'Hardware', 'Display', 'Startup', 'Windows settings', 'Storage', 'Advice'];
+const TUNE_GROUP_BLURB = {
+  Hardware: 'Memory, processor, graphics and drives. The ones without a tick box need a hand in the BIOS or a part swapped.',
+  Advice: 'Things BOB cannot change for you, but worth knowing.',
+};
+
+// Windows' own "Keep these display settings?" safety net: if the screen went
+// blank nobody can answer, so no answer within the countdown means revert.
+function keepDisplayChange(title, seconds = 15) {
+  return new Promise((resolve) => {
+    const backdrop = $('modal');
+    const confirm = $('modal-confirm');
+    const cancel = $('modal-cancel');
+    let left = seconds;
+    const body = () => `${title}. Can you see this clearly? It goes back automatically in ${left} second${left === 1 ? '' : 's'}.`;
+    $('modal-title').textContent = 'Keep this display setting?';
+    $('modal-body').textContent = body();
+    confirm.textContent = 'Keep it';
+    confirm.className = 'btn btn-primary';
+    cancel.textContent = 'Go back';
+    backdrop.hidden = false;
+    const timer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) finish(false);
+      else $('modal-body').textContent = body();
+    }, 1000);
+    function finish(answer) {
+      clearInterval(timer);
+      backdrop.hidden = true;
+      cancel.textContent = 'Cancel';
+      confirm.removeEventListener('click', onYes);
+      cancel.removeEventListener('click', onNo);
+      resolve(answer);
+    }
+    const onYes = () => finish(true);
+    const onNo = () => finish(false);
+    confirm.addEventListener('click', onYes);
+    cancel.addEventListener('click', onNo);
+  });
+}
+
+function tuneSelectable(s) {
+  return s.actionable && !s.blocked;
+}
+
+function updateTuneupSelection() {
+  const list = state.tuneup.suggestions;
+  const chosen = list.filter((s) => state.tuneup.selected.has(s.id));
+  $('tuneup-selection').hidden = !list.some(tuneSelectable);
+  $('tuneup-selection-text').textContent = chosen.length
+    ? `${chosen.length} of ${list.filter(tuneSelectable).length} changes selected`
+    : 'Nothing selected';
+  $('tuneup-apply').disabled = chosen.length === 0 || state.tuneup.busy;
+}
+
+function tuneupRow(s) {
+  const row = document.createElement(s.actionable ? 'label' : 'div');
+  row.className = `clean-row tune-row${!s.actionable ? ' is-advice' : s.blocked ? ' is-empty' : ''}`;
+
+  if (s.actionable) {
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = state.tuneup.selected.has(s.id);
+    input.disabled = !tuneSelectable(s) || state.tuneup.busy;
+    input.addEventListener('change', () => {
+      if (input.checked) state.tuneup.selected.add(s.id);
+      else state.tuneup.selected.delete(s.id);
+      updateTuneupSelection();
+    });
+    row.append(input);
+  } else {
+    const dot = document.createElement('span');
+    dot.className = `tune-advice-dot impact-${s.impact.toLowerCase()}`;
+    dot.textContent = 'i';
+    row.append(dot);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'clean-body';
+  const name = document.createElement('div');
+  name.className = 'clean-name';
+  name.append(document.createTextNode(s.title));
+  const tag = (text, cls) => {
+    const t = document.createElement('span');
+    t.className = `tag ${cls || ''}`;
+    t.textContent = text;
+    name.append(t);
+  };
+  if (s.actionable && s.recommended) tag('Recommended', 'tag-scope-public');
+  if (s.blocked) tag('Needs administrator', 'tag-warn');
+  if (s.permanent) tag('Permanent', 'tag-danger');
+  if (s.restart) tag('Needs a restart', 'tag-warn');
+  const desc = document.createElement('div');
+  desc.className = 'clean-desc';
+  desc.textContent = s.detail;
+  body.append(name, desc);
+
+  const impact = document.createElement('div');
+  impact.className = `tune-impact impact-${s.impact.toLowerCase()}`;
+  impact.textContent = `${s.impact} impact`;
+
+  row.append(body, impact);
+  return row;
+}
+
+function renderTuneupSummary() {
+  const box = $('tuneup-summary');
+  const sum = state.tuneup.summary;
+  box.hidden = !sum;
+  if (!sum) return;
+  box.replaceChildren();
+  const fact = (label, value) => {
+    const f = document.createElement('div');
+    f.className = 'tune-fact';
+    const l = document.createElement('div');
+    l.className = 'tune-fact-label';
+    l.textContent = label;
+    const v = document.createElement('div');
+    v.className = 'tune-fact-value';
+    v.textContent = value;
+    f.append(l, v);
+    box.append(f);
+  };
+  fact('Processor', sum.cpu.replace(/\(R\)|\(TM\)|CPU|@.*$/g, '').replace(/\s+/g, ' ').trim());
+  fact('Memory', `${formatBytes(sum.ram)} · ${sum.ramUsedPct}% in use`);
+  fact(`System drive (${sum.drive})`, `${sum.media || 'Disk'} · ${formatBytes(sum.free)} free`);
+  fact('Power plan', sum.powerPlan || '—');
+  fact('Running for', sum.uptimeDays == null ? '—' : sum.uptimeDays === 0 ? 'under a day' : `${sum.uptimeDays} day${sum.uptimeDays === 1 ? '' : 's'}`);
+}
+
+function renderTuneupChanges() {
+  const box = $('tuneup-changes');
+  box.replaceChildren();
+  const changes = state.tuneup.changes;
+  if (!changes.length) return;
+
+  const head = document.createElement('div');
+  head.className = 'tune-changes-head';
+  const title = document.createElement('div');
+  title.className = 'group-title';
+  title.textContent = 'Changes BOB has made';
+  const all = document.createElement('button');
+  all.className = 'btn btn-ghost btn-small';
+  all.textContent = 'Undo all';
+  all.disabled = state.tuneup.busy;
+  all.addEventListener('click', async () => {
+    const ok = await confirmAction({
+      title: `Undo all ${changes.length} changes?`,
+      body: 'Every setting BOB changed here goes back to how it was before.',
+      confirmLabel: 'Undo all',
+      danger: false,
+    });
+    if (!ok) return;
+    await tuneupBusy(async () => {
+      const r = await window.pc.tuneup.undoAll();
+      state.tuneup.changes = r.changes;
+      if (r.failed.length) toast(`Could not undo: ${r.failed.map((f) => `${f.title} (${f.error})`).join('; ')}`, 'error');
+      else toast(`Undid ${r.done.length} change${r.done.length === 1 ? '' : 's'}.`, 'good');
+    });
+    if (state.tuneup.scanned) scanTuneup();
+  });
+  head.append(title, all);
+  box.append(head);
+
+  const list = document.createElement('div');
+  list.className = 'list';
+  for (const c of [...changes].reverse()) {
+    const row = document.createElement('div');
+    row.className = 'clean-row tune-change';
+    const body = document.createElement('div');
+    body.className = 'clean-body';
+    const name = document.createElement('div');
+    name.className = 'clean-name';
+    name.textContent = c.title;
+    const when = document.createElement('div');
+    when.className = 'clean-desc';
+    when.textContent = `Done ${new Date(c.appliedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${c.restart ? ' · takes effect after a restart' : ''}`;
+    body.append(name, when);
+    const undo = document.createElement('button');
+    undo.className = 'btn btn-ghost btn-small';
+    undo.textContent = 'Undo';
+    undo.disabled = state.tuneup.busy;
+    undo.addEventListener('click', async () => {
+      await tuneupBusy(async () => {
+        const r = await window.pc.tuneup.undo(c.key);
+        state.tuneup.changes = r.changes;
+        toast(`Undone: ${r.title}`, 'good');
+      });
+      if (state.tuneup.scanned) scanTuneup();
+    });
+    row.append(body, undo);
+    list.append(row);
+  }
+  box.append(list);
+}
+
+function renderTuneupReport() {
+  const box = $('tuneup-report');
+  const results = state.tuneup.results;
+  box.replaceChildren();
+  box.hidden = !results;
+  if (!results) return;
+  const good = results.filter((r) => r.ok);
+  const bad = results.filter((r) => !r.ok);
+  box.className = `ar-summary ${bad.length ? 'is-warn' : 'is-good'} clean-report`;
+  const lead = document.createElement('div');
+  lead.className = 'ar-summary-lead';
+  lead.textContent = `${good.length} change${good.length === 1 ? '' : 's'} made${bad.length ? ` · ${bad.length} not done` : ''}`;
+  const sub = document.createElement('div');
+  sub.className = 'ar-summary-sub';
+  sub.textContent = good.length ? 'Each one can be undone below (except clearing junk files).' : '';
+  box.append(lead, sub);
+  const list = document.createElement('div');
+  list.className = 'clean-report-list';
+  for (const r of results) {
+    const line = document.createElement('div');
+    line.className = 'clean-report-line';
+    const l = document.createElement('span');
+    l.textContent = r.title;
+    const v = document.createElement('span');
+    v.textContent = r.ok ? r.detail || 'Done' : r.error;
+    if (!r.ok) v.className = 'is-warn';
+    line.append(l, v);
+    list.append(line);
+  }
+  box.append(list);
+  const close = document.createElement('button');
+  close.className = 'btn btn-ghost btn-small clean-report-close';
+  close.textContent = 'Dismiss';
+  close.addEventListener('click', () => {
+    state.tuneup.results = null;
+    renderTuneupReport();
+  });
+  box.append(close);
+}
+
+function renderTuneup() {
+  const container = $('tuneup-groups');
+  container.replaceChildren();
+  const list = state.tuneup.suggestions;
+
+  if (state.tuneup.scanned && !list.length) {
+    container.append(empty('Nothing to improve — this PC is already set up well.'));
+  }
+  for (const group of TUNE_GROUPS) {
+    const items = list.filter((s) => s.category === group);
+    if (!items.length) continue;
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = group;
+    container.append(title);
+    if (TUNE_GROUP_BLURB[group]) {
+      const blurb = document.createElement('div');
+      blurb.className = 'group-blurb';
+      blurb.textContent = TUNE_GROUP_BLURB[group];
+      container.append(blurb);
+    }
+    const box = document.createElement('div');
+    box.className = 'list';
+    for (const s of items) box.append(tuneupRow(s));
+    container.append(box);
+  }
+
+  const actionable = list.filter((s) => s.actionable);
+  const advice = list.length - actionable.length;
+  if (state.tuneup.scanned) {
+    $('tuneup-subtitle').textContent = actionable.length || advice
+      ? `${actionable.length} change${actionable.length === 1 ? '' : 's'} BOB can make${advice ? ` · ${advice} piece${advice === 1 ? '' : 's'} of advice` : ''}.`
+      : 'This PC is already set up well.';
+    $('nav-tuneup-count').textContent = actionable.length ? String(actionable.length) : '';
+  }
+  renderTuneupSummary();
+  renderTuneupChanges();
+  updateTuneupSelection();
+}
+
+async function tuneupBusy(fn) {
+  state.tuneup.busy = true;
+  renderTuneup();
+  try {
+    await fn();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.tuneup.busy = false;
+    renderTuneup();
+  }
+}
+
+window.pc.tuneup.onProgress(({ label }) => {
+  $('tuneup-progress-label').textContent = label === 'Done' ? 'Finishing…' : `${label}…`;
+});
+
+async function scanTuneup() {
+  $('tuneup-scan').disabled = true;
+  $('tuneup-progress').hidden = false;
+  $('tuneup-progress-label').textContent = 'Reading this PC’s setup…';
+  try {
+    const r = await window.pc.tuneup.scan();
+    state.tuneup.suggestions = r.suggestions;
+    state.tuneup.summary = r.summary;
+    state.tuneup.changes = r.changes;
+    state.tuneup.admin = r.admin;
+    state.tuneup.scanned = true;
+    // Start with the recommended changes ticked; the tech adjusts from there.
+    state.tuneup.selected = new Set(r.suggestions.filter((s) => tuneSelectable(s) && s.recommended).map((s) => s.id));
+    $('tuneup-scan').textContent = 'Scan again';
+    $('tuneup-scan').className = 'btn btn-ghost';
+    renderTuneup();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('tuneup-progress').hidden = true;
+    $('tuneup-scan').disabled = false;
+  }
+}
+
+async function loadTuneup() {
+  state.tuneup.loaded = true;
+  try {
+    state.tuneup.changes = await window.pc.tuneup.changes();
+  } catch {
+    state.tuneup.changes = [];
+  }
+  renderTuneup();
+}
+
+$('tuneup-scan').addEventListener('click', scanTuneup);
+
+$('tuneup-select-recommended').addEventListener('click', () => {
+  state.tuneup.selected = new Set(state.tuneup.suggestions.filter((s) => tuneSelectable(s) && s.recommended).map((s) => s.id));
+  renderTuneup();
+});
+
+$('tuneup-select-none').addEventListener('click', () => {
+  state.tuneup.selected.clear();
+  renderTuneup();
+});
+
+$('tuneup-apply').addEventListener('click', async () => {
+  const chosen = state.tuneup.suggestions.filter((s) => state.tuneup.selected.has(s.id));
+  if (!chosen.length) return;
+  const permanent = chosen.filter((s) => s.permanent);
+  const ok = await confirmAction({
+    title: `Make ${chosen.length} change${chosen.length === 1 ? '' : 's'}?`,
+    body: `${chosen.map((s) => s.title).join('; ')}.${
+      permanent.length ? ' Clearing junk files cannot be undone;' : ''
+    } ${permanent.length ? 'everything else' : 'Each change'} is recorded so it can be undone from this tab.`,
+    confirmLabel: 'Do it',
+    danger: false,
+  });
+  if (!ok) return;
+  $('tuneup-progress').hidden = false;
+  $('tuneup-progress-label').textContent = 'Making changes…';
+  await tuneupBusy(async () => {
+    const r = await window.pc.tuneup.apply([...state.tuneup.selected]);
+    state.tuneup.results = r.results;
+    state.tuneup.changes = r.changes;
+    for (const res of r.results.filter((x) => x.ok && x.verifyDisplay && x.key)) {
+      if (await keepDisplayChange(res.title)) continue;
+      const u = await window.pc.tuneup.undo(res.key);
+      state.tuneup.changes = u.changes;
+      res.ok = false;
+      res.error = 'Put back — it was not confirmed on screen.';
+    }
+    renderTuneupReport();
+  });
+  $('tuneup-progress').hidden = true;
+  await scanTuneup();
 });
 
 /* Large files -------------------------------------------------------------- */

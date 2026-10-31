@@ -202,7 +202,7 @@ for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 1000
   }
 }
-if ($done) { Log "swap OK"; Start-Process -FilePath $old }
+if ($done) { Log "swap OK"; Start-Process -FilePath $old -WindowStyle Normal }
 else { Log "swap FAILED after retries - the new build is at $new" }
 `;
 }

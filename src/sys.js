@@ -45,7 +45,21 @@ $disks = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction 
 async function elevate() {
   const args = app.isPackaged ? [] : [path.resolve(app.getAppPath())];
   const exe = (app.isPackaged && process.env.PORTABLE_EXECUTABLE_FILE) || process.execPath;
-  await ps.mutate(`
+  // BOB allows one copy at a time; let the elevated copy take over the lock
+  // (this one quits straight after), and keep it if the UAC prompt is declined.
+  app.releaseSingleInstanceLock();
+  try {
+    await launchElevated(exe, args);
+  } catch (err) {
+    app.requestSingleInstanceLock();
+    throw err;
+  }
+  setTimeout(() => app.quit(), 600);
+  return true;
+}
+
+function launchElevated(exe, args) {
+  return ps.mutate(`
 ${ps.payload({ exe, args })}
   # Each argument is quoted: the app path (e.g. "D:\\Projects\\PC Cleanup")
   # contains a space, and Start-Process -ArgumentList does not quote array
@@ -58,8 +72,6 @@ ${ps.payload({ exe, args })}
     Start-Process -FilePath $Payload.exe -Verb RunAs | Out-Null
   }
 `);
-  setTimeout(() => app.quit(), 600);
-  return true;
 }
 
 module.exports = { overview, elevate };
