@@ -75,6 +75,7 @@
             <button class="tab" data-view="dupes">Duplicates<span class="nav-count" id="nav-dupes-count"></span></button>
             <button class="tab" data-view="registry">Registry<span class="nav-count" id="nav-registry-count"></span></button>
             <button class="tab" data-view="startup">Startup<span class="nav-count" id="nav-startup-count"></span></button>
+            <button class="tab" data-view="running">Running now</button>
             <button class="tab" data-view="programs">Programs<span class="nav-count" id="nav-programs-count"></span></button>
             <button class="tab" data-view="apps">App updates<span class="nav-count" id="nav-apps-count"></span></button>
             <button class="tab" data-view="explorer">Explorer tweaks</button>
@@ -110,6 +111,7 @@
             <button class="tab" data-view="repair">Repair</button>
             <button class="tab" data-view="kit">Reinstall kit</button>
             <button class="tab" data-view="install">Install programs<span class="nav-count" id="nav-install-count"></span></button>
+            <button class="tab" data-view="results">Before &amp; after</button>
             <button class="tab" data-view="toolbox">Toolbox</button>
             <button class="tab" data-view="backups">Backups<span class="nav-count" id="nav-backups-count"></span></button>
           </div>
@@ -163,6 +165,39 @@
         </section>
 
         <!-- Startup -->
+        <section class="view" id="view-results">
+          <header class="view-head">
+            <div>
+              <h1>Before &amp; after</h1>
+              <p class="subtitle" id="results-subtitle">What the work on this PC has actually changed, measured rather than assumed.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="results-copy">Copy results</button>
+              <button class="btn btn-ghost" id="results-new">Start a new Before</button>
+              <button class="btn btn-primary" id="results-save">Save as After</button>
+            </div>
+          </header>
+          <div id="results-body"><div class="empty">Measuring this PC…</div></div>
+        </section>
+
+        <section class="view" id="view-running">
+          <header class="view-head">
+            <div>
+              <h1>Running now</h1>
+              <p class="subtitle" id="running-subtitle">Everything using this PC's processor, memory and disk, grouped by program.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="running-search" type="search" placeholder="Search…" aria-label="Search running programs" />
+              <select id="running-sort" aria-label="Sort by"><option value="mem">Most memory</option><option value="cpu">Most processor</option><option value="io">Most disk</option><option value="name">Name</option></select>
+            </div>
+          </header>
+          <label class="check inline running-toggle">
+            <input type="checkbox" id="running-windows" />
+            <span>Include parts of Windows</span>
+          </label>
+          <div class="list" id="running-list"><div class="empty">Reading what's running…</div></div>
+        </section>
+
         <section class="view" id="view-startup">
           <header class="view-head">
             <div>
@@ -175,7 +210,11 @@
             </div>
           </header>
 
+          <div id="startup-boot"></div>
+
           <div class="list" id="startup-list"></div>
+
+          <p class="group-blurb startup-services">Background services that start with Windows are in <button class="tune-link" id="startup-to-autoruns">Autoruns</button>.</p>
 
           <header class="view-head view-head-sub">
             <div>
@@ -240,7 +279,7 @@
               <li>An entry is only listed when it names a <strong>real path that is definitely not there</strong>. No guessing at what looks unused.</li>
               <li>Paths on <strong>unplugged drives and offline network shares are ignored</strong>, so a disconnected disk never looks like junk.</li>
               <li><strong>Everything removed is backed up first</strong> to a .reg file you can restore from the Backups tab.</li>
-              <li>Deliberately left alone: file associations, COM/CLSID registrations, and anything Windows Installer manages — that is where registry cleaners break machines.</li>
+              <li>Deliberately left alone: file associations, COM/CLSID registrations, Windows' own firewall rules, and Windows Installer's product records — that is where registry cleaners break machines.</li>
             </ul>
           </div>
 

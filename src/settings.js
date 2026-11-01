@@ -25,7 +25,7 @@ function write(settings) {
 }
 
 // On a USB stick these belong to the PC they were made on, not to the stick.
-const PER_PC = new Set(['tuneupChanges', 'nvflashPath']);
+const PER_PC = new Set(['tuneupChanges', 'nvflashPath', 'improvement']);
 function scoped(key) {
   return PER_PC.has(key) && portable.active() ? `${key}@${os.hostname()}` : key;
 }

@@ -181,6 +181,7 @@ contextBridge.exposeInMainWorld('pc', {
   startup: {
     list: () => call('startup:list'),
     tasks: () => call('startup:tasks'),
+    boot: () => call('startup:boot'),
     setEnabled: (id, enabled) => call('startup:setEnabled', id, enabled),
     remove: (id) => call('startup:remove', id),
     reveal: (id) => call('startup:reveal', id),
@@ -224,6 +225,18 @@ contextBridge.exposeInMainWorld('pc', {
       ipcRenderer.on('registry:progress', listener);
       return () => ipcRenderer.removeListener('registry:progress', listener);
     },
+  },
+
+  results: {
+    get: () => call('results:get'),
+    newBefore: () => call('results:newBefore'),
+    saveAfter: () => call('results:saveAfter'),
+  },
+
+  running: {
+    list: () => call('running:list'),
+    end: (key) => call('running:end', key),
+    reveal: (key) => call('running:reveal', key),
   },
 
   usb: {

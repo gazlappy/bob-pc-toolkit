@@ -1680,7 +1680,7 @@ select:focus {
 }
 
 .row-meta {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -1868,7 +1868,7 @@ select:focus {
 }
 
 .clean-safety {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -4068,4 +4068,185 @@ select:focus {
   margin-top: 14px;
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Running now --------------------------------------------------------------- */
+.running-toggle {
+  display: inline-flex;
+  margin-bottom: 12px;
+}
+
+.running-stat {
+  flex: 0 0 74px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Boot report --------------------------------------------------------------- */
+#startup-boot .ar-summary {
+  margin-bottom: 14px;
+}
+
+.boottime-heading {
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.boottime-list {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  max-width: 720px;
+}
+
+.boottime-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 90px 70px;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.boottime-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.boottime-kind,
+.boottime-times {
+  color: var(--muted);
+}
+
+.boottime-time {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.boottime-more {
+  margin-top: 10px;
+}
+
+.startup-services {
+  margin-top: 10px;
+}
+
+/* Registry ------------------------------------------------------------------ */
+.registry-tick {
+  margin-bottom: 8px;
+}
+
+.registry-more {
+  margin: 8px 0 4px;
+}
+
+/* Before and after ---------------------------------------------------------- */
+.results-hero {
+  margin-bottom: 14px;
+}
+
+.results-bars {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.results-bars-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.results-bar-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 280px) minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.results-bar-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.results-bar-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.results-bar-track {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--inset);
+}
+
+.results-bar-fill {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+
+.results-bar-fill.is-before {
+  background: var(--muted);
+}
+
+.results-bar-value {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.results-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.results-table th,
+.results-table td {
+  padding: 8px 14px;
+  border-top: 1px solid var(--line-soft);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.results-table thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.results-table tbody th {
+  font-weight: 500;
+  text-align: left;
+}
+
+.results-change.is-better {
+  color: var(--good-text);
+  font-weight: 600;
+}
+
+.results-change.is-worse {
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+.results-note {
+  margin-top: 10px;
 }

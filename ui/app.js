@@ -4,14 +4,14 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   admin: false,
-  startup: { entries: [], tasks: [], search: '', showWindowsTasks: false, tasksLoaded: false },
+  startup: { entries: [], tasks: [], search: '', showWindowsTasks: false, tasksLoaded: false, boot: null, bootAll: false },
   prefs: null,
   currentView: 'overview',
   tuneup: { suggestions: [], summary: null, changes: [], selected: new Set(), results: null, scanned: false, loaded: false, busy: false, admin: false },
   cleanup: { targets: [], profiles: [], selected: new Set(), scanned: false, report: null, cleaning: false },
   files: { results: null, selected: new Set(), roots: [], mode: 'list' },
   map: { node: null, trail: [], selected: null, built: false, summary: null },
-  registry: { groups: [], selected: new Set(), scanned: false },
+  registry: { groups: [], selected: new Set(), expanded: new Set(), scanned: false },
   backups: { items: [] },
   programs: { items: [], search: '', sort: 'size', loaded: false },
   dupes: { groups: [], selected: new Set(), scanned: false, summary: null },
@@ -31,6 +31,7 @@ const state = {
   toolbox: { data: null, loaded: false, search: '', running: null },
   malware: { data: null, loaded: false },
   usb: null,
+  results: { data: null, text: '' },
   stress: { loaded: false, options: {}, stopped: false, report: null },
   kit: { plan: null, dest: null, sizes: {}, selected: new Set(), steps: new Set(), busy: false, loaded: false },
   apps: { upgrades: null, selected: new Set(), busy: false, loaded: false },
@@ -182,6 +183,9 @@ function show(view) {
   if (view === 'programs' && !state.programs.loaded) loadPrograms();
   if (view === 'system' && !state.system.loaded) loadSystem();
   if (view === 'devices' && !state.devices.loaded) loadDevices();
+  if (view === 'results') loadResults();
+  if (view === 'running') startRunning();
+  else stopRunning();
   if (view === 'monitor') startMonitor();
   else stopMonitor();
   if (view === 'gpu') startGpu();
@@ -366,6 +370,20 @@ function startupRow(entry) {
     tag.textContent = 'All users';
     tags.append(tag);
   }
+  const slowed = startupSlowdown(entry);
+  if (slowed) {
+    const tag = document.createElement('span');
+    tag.className = 'tag tag-warn';
+    tag.textContent = `Slows boot ~${bootSeconds(slowed.typical)}`;
+    tag.title = `Windows logged this slowing startup ${slowed.times} time${slowed.times === 1 ? '' : 's'} in the last 30 days. Worst: ${bootSeconds(slowed.worst)}.`;
+    tags.append(tag);
+  }
+  if (entry.running) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = `Running, ${formatBytes(entry.running.bytes)}`;
+    tags.append(tag);
+  }
 
   const actions = document.createElement('div');
   actions.className = 'row-actions';
@@ -377,8 +395,11 @@ function startupRow(entry) {
     window.pc.startup.reveal(entry.id).catch((error) => toast(error.message, 'error'));
   });
 
+  reveal.hidden = entry.kind === 'packaged';
+
   const remove = document.createElement('button');
   remove.className = 'btn btn-ghost btn-small';
+  remove.hidden = entry.kind === 'packaged';
   remove.textContent = 'Delete';
   remove.title = 'Delete this entry entirely, rather than just switching it off';
   remove.disabled = entry.scope === 'machine' && !state.admin;
@@ -409,7 +430,7 @@ function startupRow(entry) {
 
   const label = document.createElement('label');
   label.className = 'switch';
-  label.title = entry.approvable ? 'Run at startup' : 'Run-once entries cannot be disabled';
+  label.title = entry.approvable ? 'Run at startup' : 'This one cannot be switched off from here';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = entry.enabled;
@@ -520,6 +541,9 @@ function renderStartup() {
   const matches = state.startup.entries.filter((entry) => {
     if (!term) return true;
     return [entry.name, entry.product, entry.publisher, entry.command].join(' ').toLowerCase().includes(term);
+  }).sort((a, b) => {
+    const worth = (entry) => (entry.enabled ? 1 : 0) * (1 + (startupSlowdown(entry) ? startupSlowdown(entry).typical : 0));
+    return worth(b) - worth(a);
   });
 
   if (!matches.length) {
@@ -553,7 +577,69 @@ function renderStartup() {
   updateStartupCounts();
 }
 
+function bootSeconds(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  return s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${Math.floor(s / 60)} min`;
+}
+
+function startupSlowdown(entry) {
+  const report = state.startup.boot;
+  if (!report || !entry.executable) return null;
+  const file = entry.executable.split(/[\\/]/).pop().toLowerCase();
+  return report.slow.find((item) => item.file.toLowerCase() === file) || null;
+}
+
+function renderBootReport() {
+  const box = $('startup-boot');
+  const report = state.startup.boot;
+  box.replaceChildren();
+  if (!report) return;
+  if (!report.readable) {
+    const note = el('div', 'ar-summary');
+    note.append(el('div', 'ar-summary-lead', 'Boot times'));
+    note.append(el('div', 'ar-summary-sub', report.admin
+      ? 'Windows has no boot timings from the last 30 days.'
+      : 'Windows only shows its boot timings to administrators. Restart BOB as admin to see how long this PC takes to start and what slows it down.'));
+    box.append(note);
+    return;
+  }
+  const card = el('div', 'ar-summary boottime-card');
+  const last = report.boots[0];
+  if (last) {
+    card.append(el('div', 'ar-summary-lead', `Last start took ${bootSeconds(last.total)}`));
+    card.append(el('div', 'ar-summary-sub', `${bootSeconds(last.main)} to reach the desktop, then ${bootSeconds(last.post)} until the PC settled. These are Windows' own timings.`));
+    if (report.boots.length > 1) {
+      card.append(el('div', 'ar-summary-sub', `Recent starts: ${report.boots.map((b) => bootSeconds(b.total)).join(', ')}.`));
+    }
+  }
+  if (report.slow.length) {
+    card.append(el('div', 'boottime-heading', 'What Windows says slowed starts in the last 30 days'));
+    const list = el('div', 'boottime-list');
+    for (const item of report.slow.slice(0, state.startup.bootAll ? 40 : 6)) {
+      const line = el('div', 'boottime-line');
+      line.append(el('span', 'boottime-name', item.name), el('span', 'boottime-kind', item.kind), el('span', 'boottime-time', `+${bootSeconds(item.typical)}`), el('span', 'boottime-times', `${item.times} time${item.times === 1 ? '' : 's'}`));
+      list.append(line);
+    }
+    card.append(list);
+    if (report.slow.length > 6 && !state.startup.bootAll) {
+      const more = el('button', 'btn btn-ghost btn-small boottime-more', `Show all ${report.slow.length}`);
+      more.addEventListener('click', () => {
+        state.startup.bootAll = true;
+        renderBootReport();
+      });
+      card.append(more);
+    }
+  }
+  box.append(card);
+}
+
 async function loadStartup() {
+  window.pc.startup.boot().then((report) => {
+    state.startup.boot = report;
+    renderBootReport();
+    if (state.startup.entries.length) renderStartup();
+  }).catch(() => {});
   $('startup-list').replaceChildren(empty('Reading startup entries…'));
   $('tasks-list').replaceChildren(empty('Reading scheduled tasks…'));
   state.startup.tasksLoaded = false;
@@ -580,6 +666,7 @@ async function loadStartup() {
 }
 
 $('startup-refresh').addEventListener('click', loadStartup);
+$('startup-to-autoruns').addEventListener('click', () => show('autoruns'));
 $('startup-search').addEventListener('input', (event) => {
   state.startup.search = event.target.value;
   renderStartup();
@@ -6856,6 +6943,8 @@ function allRegistryItems() {
   return state.registry.groups.flatMap((group) => group.items);
 }
 
+const REGISTRY_PREVIEW = 25;
+
 function renderRegistry() {
   const container = $('registry-groups');
   container.replaceChildren();
@@ -6878,7 +6967,7 @@ function renderRegistry() {
 
     const title = document.createElement('div');
     title.className = 'group-title';
-    title.textContent = `${group.label} · ${group.count}`;
+    title.textContent = `${group.label} · ${group.count.toLocaleString()}`;
     container.append(title);
 
     const blurb = document.createElement('p');
@@ -6886,10 +6975,25 @@ function renderRegistry() {
     blurb.textContent = `${group.description} ${group.safety}`;
     container.append(blurb);
 
+    const usable = group.items.filter((item) => !(item.needsAdmin && !state.admin));
+    if (usable.length) {
+      const allTicked = usable.every((item) => state.registry.selected.has(item.id));
+      const tickAll = el('button', 'btn btn-ghost btn-small registry-tick', allTicked ? 'Untick this group' : `Tick all ${usable.length.toLocaleString()}`);
+      tickAll.addEventListener('click', () => {
+        for (const item of usable) {
+          if (allTicked) state.registry.selected.delete(item.id);
+          else state.registry.selected.add(item.id);
+        }
+        renderRegistry();
+      });
+      container.append(tickAll);
+    }
+
     const list = document.createElement('div');
     list.className = 'list';
 
-    for (const item of group.items) {
+    const expanded = state.registry.expanded.has(group.id);
+    for (const item of expanded ? group.items : group.items.slice(0, REGISTRY_PREVIEW)) {
       const row = document.createElement('label');
       row.className = 'clean-row';
 
@@ -6936,9 +7040,17 @@ function renderRegistry() {
     }
 
     container.append(list);
+    if (!expanded && group.items.length > REGISTRY_PREVIEW) {
+      const more = el('button', 'btn btn-ghost btn-small registry-more', `Show all ${group.count.toLocaleString()}`);
+      more.addEventListener('click', () => {
+        state.registry.expanded.add(group.id);
+        renderRegistry();
+      });
+      container.append(more);
+    }
   }
 
-  $('registry-subtitle').textContent = `${total} entr${total === 1 ? 'y' : 'ies'} point at programs that are no longer installed.`;
+  $('registry-subtitle').textContent = `${total.toLocaleString()} entr${total === 1 ? 'y points' : 'ies point'} at files or folders that no longer exist.`;
   $('nav-registry-count').textContent = String(total);
   updateRegistrySelection();
 }
@@ -7310,6 +7422,317 @@ async function applyStartupSettings() {
     /* run on defaults */
   }
 }
+
+/* Before and after --------------------------------------------------------- */
+
+const RESULT_ROWS = [
+  { label: 'Time to start', from: (s) => s.boot && s.boot.total, show: bootSeconds, word: (d) => (d < 0 ? 'faster' : 'slower'), diff: bootSeconds, good: -1 },
+  { label: 'Time to reach the desktop', from: (s) => s.boot && s.boot.main, show: bootSeconds, word: (d) => (d < 0 ? 'faster' : 'slower'), diff: bootSeconds, good: -1 },
+  { label: 'Time to settle after that', from: (s) => s.boot && s.boot.post, show: bootSeconds, word: (d) => (d < 0 ? 'faster' : 'slower'), diff: bootSeconds, good: -1 },
+  { label: 'Programs starting with Windows', from: (s) => s.readings && s.readings.startupOn, show: String, word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => String(n), good: -1 },
+  { label: 'Dead registry entries', from: (s) => s.readings && s.readings.registryDead, show: (n) => n.toLocaleString(), word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => n.toLocaleString(), good: -1 },
+  { label: 'Programs running now', from: (s) => s.readings && s.readings.running, show: String, word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => String(n), good: -1 },
+  { label: 'Memory in use', note: 'Moves up and down with whatever is open.', from: (s) => s.readings && s.readings.memUsed, show: formatBytes, word: (d) => (d < 0 ? 'less' : 'more'), diff: formatBytes, good: -1, small: 100 * 1048576 },
+  { label: 'Free space on the Windows drive', from: (s) => s.readings && s.readings.diskFree, show: formatBytes, word: (d) => (d > 0 ? 'more' : 'less'), diff: formatBytes, good: 1, small: 100 * 1048576 },
+];
+
+function resultClock(when) {
+  const d = new Date(when);
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function resultValue(row, source) {
+  if (!source) return null;
+  const value = row.from(source);
+  return value === null || value === undefined ? null : value;
+}
+
+function resultChange(row, before, later) {
+  if (before === null || later === null) return null;
+  const delta = later - before;
+  if (Math.abs(delta) <= (row.small || 0) || (row.show === bootSeconds && Math.abs(delta) < 1000)) return { text: 'No real change', cls: '' };
+  const better = Math.sign(delta) === row.good;
+  return { text: `${row.diff(Math.abs(delta))} ${row.word(delta)}`, cls: better ? 'is-better' : 'is-worse', better };
+}
+
+function resultBar(label, sub, ms, most, faded) {
+  const line = el('div', 'results-bar-row');
+  const name = el('div', 'results-bar-label');
+  name.append(el('div', 'results-bar-name', label), el('div', 'results-bar-sub', sub));
+  const track = el('div', 'results-bar-track');
+  const fill = el('div', `results-bar-fill${faded ? ' is-before' : ''}`);
+  if (ms) fill.style.width = `${Math.max(1, (ms / most) * 100)}%`;
+  track.append(fill);
+  track.title = ms ? `${label}: ${bootSeconds(ms)}. ${sub}` : `${label}: ${sub}`;
+  line.append(name, track, el('div', 'results-bar-value', ms ? bootSeconds(ms) : '–'));
+  return line;
+}
+
+function startCount(boot) {
+  return `${boot.count} start${boot.count === 1 ? '' : 's'}`;
+}
+
+function renderResults() {
+  const d = state.results.data;
+  const body = $('results-body');
+  body.replaceChildren();
+  const beforeBoot = d.before.boot;
+  const afterBoot = d.after.boot;
+  const currentBoot = d.current.boot;
+
+  const hero = el('div', 'ar-summary results-hero');
+  if (!d.readable) {
+    hero.append(el('div', 'ar-summary-lead', 'Start times need BOB running as admin'));
+    hero.append(el('div', 'ar-summary-sub', 'Windows only shows its boot timings to administrators. Everything else below still works.'));
+  } else if (beforeBoot && afterBoot) {
+    const change = resultChange(RESULT_ROWS[0], beforeBoot.total, afterBoot.total);
+    const percent = Math.round((Math.abs(afterBoot.total - beforeBoot.total) / beforeBoot.total) * 100);
+    hero.classList.add(change.better ? 'is-good' : change.cls === 'is-worse' ? 'is-warn' : 'results-even');
+    hero.append(el('div', 'ar-summary-lead', change.cls ? `Starts ${change.text} (${percent}%)` : 'Start time has not really changed'));
+    hero.append(el('div', 'ar-summary-sub', afterBoot.count < 3 ? `Based on ${startCount(afterBoot)} since the work began. Restart a couple more times for a firmer figure.` : `Based on the middle of ${startCount(afterBoot)} since the work began.`));
+  } else if (beforeBoot) {
+    hero.append(el('div', 'ar-summary-lead', 'Restart this PC to measure the difference'));
+    hero.append(el('div', 'ar-summary-sub', 'Windows times each start, so the After figure appears once the PC has restarted and settled for a couple of minutes.'));
+  } else {
+    hero.append(el('div', 'ar-summary-lead', 'No start times from before the work'));
+    hero.append(el('div', 'ar-summary-sub', 'Windows has none logged from before then.'));
+  }
+  body.append(hero);
+
+  if (beforeBoot || afterBoot || currentBoot) {
+    const most = Math.max(beforeBoot ? beforeBoot.total : 0, currentBoot ? currentBoot.total : 0, afterBoot ? afterBoot.total : 0);
+    const bars = el('div', 'results-bars');
+    bars.append(el('div', 'results-bars-title', 'Time to start'));
+    bars.append(resultBar('Before', beforeBoot ? `Middle of ${startCount(beforeBoot)} up to ${resultClock(beforeBoot.to)}` : 'Not recorded', beforeBoot && beforeBoot.total, most, true));
+    bars.append(resultBar('Current', currentBoot ? `Latest start, ${resultClock(currentBoot.when)}` : 'Not recorded', currentBoot && currentBoot.total, most, false));
+    bars.append(resultBar('After', afterBoot ? `${d.after.saved ? 'Saved. ' : ''}Middle of ${startCount(afterBoot)} since the work began` : 'Restart to measure', afterBoot && afterBoot.total, most, false));
+    body.append(bars);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'results-table';
+  const head = document.createElement('tr');
+  for (const title of ['', 'Before', 'Current', 'After', 'Change']) {
+    const th = document.createElement('th');
+    th.textContent = title;
+    th.scope = 'col';
+    head.append(th);
+  }
+  const thead = document.createElement('thead');
+  thead.append(head);
+  table.append(thead);
+  const tbody = document.createElement('tbody');
+  const lines = [];
+  for (const row of RESULT_ROWS) {
+    const before = resultValue(row, d.before);
+    const current = resultValue(row, d.current);
+    const after = resultValue(row, d.after);
+    const change = resultChange(row, before, after !== null ? after : current);
+    const tr = document.createElement('tr');
+    const label = document.createElement('th');
+    label.scope = 'row';
+    label.textContent = row.label;
+    if (row.note) label.title = row.note;
+    tr.append(label);
+    const cells = [before, current, after].map((v) => (v === null ? '–' : row.show(v)));
+    for (const text of cells) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      tr.append(td);
+    }
+    const last = document.createElement('td');
+    last.className = `results-change ${change ? change.cls : ''}`;
+    last.textContent = change ? change.text : '–';
+    tr.append(last);
+    tbody.append(tr);
+    lines.push(`${row.label}: before ${cells[0]}, current ${cells[1]}, after ${cells[2]}${change ? ` (${change.text})` : ''}`);
+  }
+  table.append(tbody);
+  const wrap = el('div', 'results-table-wrap');
+  wrap.append(table);
+  body.append(wrap);
+  state.results.text = lines.join('\n');
+
+  const notes = [];
+  if (d.before.recovered) notes.push(`BOB began recording after work had started here, on ${resultClock(d.before.ref)}, so only start times have a Before.`);
+  else notes.push(`Before was taken on ${resultClock(d.before.ref)}.`);
+  notes.push(d.after.saved ? `After was saved on ${resultClock(d.after.at)}.` : 'Press Save as After when the job is done, ideally after a restart, to fix the other After figures. Change compares with Current until then.');
+  body.append(el('p', 'group-blurb results-note', notes.join(' ')));
+  $('results-save').disabled = false;
+}
+
+async function loadResults(action = 'get') {
+  $('results-save').disabled = true;
+  $('results-new').disabled = true;
+  if (!state.results.data) $('results-body').replaceChildren(empty('Measuring this PC…'));
+  $('results-subtitle').textContent = 'Measuring…';
+  try {
+    state.results.data = await window.pc.results[action]();
+    renderResults();
+    $('results-subtitle').textContent = 'What the work on this PC has actually changed, measured rather than assumed.';
+  } catch (error) {
+    $('results-body').replaceChildren(empty(error.message));
+    $('results-subtitle').textContent = '';
+  }
+  $('results-save').disabled = false;
+  $('results-new').disabled = false;
+}
+
+$('results-save').addEventListener('click', () => loadResults('saveAfter'));
+$('results-new').addEventListener('click', async () => {
+  const go = await confirmAction({
+    title: 'Start a new Before?',
+    body: "This PC's current readings become the new Before, for a new job. The saved Before and After are replaced.",
+    confirmLabel: 'Start new Before',
+    danger: false,
+  });
+  if (go) loadResults('newBefore');
+});
+$('results-copy').addEventListener('click', () => {
+  if (!state.results.text) return;
+  window.pc.copyText(`BOB before and after\n${state.results.text}`).then(() => toast('Results copied.', 'good')).catch((e) => toast(e.message, 'error'));
+});
+
+/* Running now -------------------------------------------------------------- */
+
+const runningView = { timer: null, busy: false, rows: [], els: new Map(), search: '', sort: 'mem', windows: false };
+
+function startRunning() {
+  if (runningView.timer) return;
+  refreshRunning();
+  runningView.timer = setInterval(refreshRunning, 3000);
+}
+
+function stopRunning() {
+  clearInterval(runningView.timer);
+  runningView.timer = null;
+}
+
+async function refreshRunning() {
+  if (runningView.busy) return;
+  runningView.busy = true;
+  try {
+    runningView.rows = await window.pc.running.list();
+    renderRunning();
+  } catch (error) {
+    if (!runningView.rows.length) $('running-list').replaceChildren(empty(error.message));
+  }
+  runningView.busy = false;
+}
+
+function runningRow(item) {
+  const row = el('div', 'row running-row');
+  const main = el('div', 'row-main');
+  const name = el('div', 'row-name');
+  const meta = el('div', 'row-meta');
+  main.append(name, meta);
+  const tags = el('div', 'row-tags');
+  const cpu = el('div', 'running-stat');
+  const mem = el('div', 'running-stat');
+  const io = el('div', 'running-stat');
+  const actions = el('div', 'row-actions');
+  const reveal = el('button', 'btn btn-ghost btn-small', 'Show file');
+  reveal.addEventListener('click', () => window.pc.running.reveal(row.dataset.key).catch((e) => toast(e.message, 'error')));
+  const stop = el('button', 'btn btn-ghost btn-small', 'End');
+  stop.addEventListener('click', () => endRunning(row.dataset.key));
+  actions.append(reveal, stop);
+  row.append(main, tags, cpu, mem, io, actions);
+  return { row, name, meta, tags, cpu, mem, io, reveal, stop };
+}
+
+async function endRunning(key) {
+  const item = runningView.rows.find((r) => r.key === key);
+  if (!item) return;
+  const service = item.services.length ? ` It runs the service "${item.services[0]}", which may start again by itself.` : '';
+  const go = await confirmAction({
+    title: `End ${item.name}?`,
+    body: `${item.count > 1 ? `All ${item.count} copies stop` : 'It stops'} straight away, and anything unsaved in it is lost.${service}`,
+    confirmLabel: 'End it',
+  });
+  if (!go) return;
+  try {
+    const { ended, failed } = await window.pc.running.end(key);
+    if (failed.length) toast(state.admin ? `Windows would not end ${item.name}: ${failed[0]}` : `Windows would not end ${item.name}. It may need BOB running as admin.`, 'error');
+    else toast(`Ended ${item.name}${ended > 1 ? ` (${ended} copies)` : ''}.`, 'good');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+  refreshRunning();
+}
+
+function renderRunning() {
+  const v = runningView;
+  const term = v.search.trim().toLowerCase();
+  const shown = v.rows
+    .filter((r) => v.windows || !r.windows)
+    .filter((r) => !term || `${r.name} ${r.file} ${r.publisher} ${r.path}`.toLowerCase().includes(term));
+  const order = {
+    mem: (a, b) => b.mem - a.mem,
+    cpu: (a, b) => b.cpu - a.cpu,
+    io: (a, b) => b.io - a.io,
+    name: (a, b) => a.name.localeCompare(b.name),
+  }[v.sort];
+  shown.sort(order);
+
+  const list = $('running-list');
+  const seen = new Set();
+  const wanted = [];
+  for (const item of shown) {
+    seen.add(item.key);
+    let parts = v.els.get(item.key);
+    if (!parts) {
+      parts = runningRow(item);
+      v.els.set(item.key, parts);
+    }
+    parts.row.dataset.key = item.key;
+    parts.name.textContent = item.count > 1 ? `${item.name} (${item.count})` : item.name;
+    parts.meta.textContent = [item.publisher || 'Unknown publisher', item.path || item.file].join('  ·  ');
+    parts.meta.title = item.path || item.file;
+    parts.cpu.textContent = `${item.cpu.toFixed(item.cpu < 10 ? 1 : 0)}%`;
+    parts.cpu.title = 'Processor';
+    parts.mem.textContent = formatBytes(item.mem);
+    parts.mem.title = 'Memory';
+    parts.io.textContent = `${formatBytes(item.io)}/s`;
+    parts.io.title = 'Disk and network activity';
+    parts.reveal.hidden = !item.path;
+    parts.stop.hidden = item.critical;
+    const tagText = [];
+    if (item.unsigned) tagText.push(['Not signed', 'tag-warn']);
+    if (item.services.length) tagText.push(['Service', '']);
+    const key = tagText.map((t) => t[0]).join('|');
+    if (parts.tagKey !== key) {
+      parts.tagKey = key;
+      parts.tags.replaceChildren(...tagText.map(([text, cls]) => el('span', `tag ${cls}`, text)));
+    }
+    wanted.push(parts.row);
+  }
+  for (const [key, parts] of v.els) {
+    if (!seen.has(key)) {
+      parts.row.remove();
+      v.els.delete(key);
+    }
+  }
+  // Rows only move when the pointer is elsewhere, so a button can't slide away mid-click.
+  const inOrder = [...list.children].length === wanted.length && wanted.every((row, i) => list.children[i] === row);
+  if (!inOrder && !list.matches(':hover')) list.replaceChildren(...wanted);
+  else if (!inOrder) for (const row of wanted) if (!row.isConnected) list.append(row);
+  if (!wanted.length) list.replaceChildren(empty('Nothing matches.'));
+  const total = v.rows.reduce((sum, r) => sum + r.mem, 0);
+  $('running-subtitle').textContent = `${v.rows.length} programs and parts of Windows, using ${formatBytes(total)} of memory. Updates every 3 seconds.`;
+}
+
+$('running-search').addEventListener('input', (event) => {
+  runningView.search = event.target.value;
+  renderRunning();
+});
+$('running-sort').addEventListener('change', (event) => {
+  runningView.sort = event.target.value;
+  renderRunning();
+});
+$('running-windows').addEventListener('change', (event) => {
+  runningView.windows = event.target.checked;
+  renderRunning();
+});
 
 /* Tech USB mode ------------------------------------------------------------ */
 
@@ -8642,9 +9065,11 @@ const FINDER_WORDS = {
   cleanup: 'junk temp temporary disk space free cache recycle bin windows.old',
   files: 'big space storage treemap disk full',
   dupes: 'duplicate copies same files space',
-  registry: 'invalid orphan keys broken entries',
-  startup: 'boot slow login logon run tasks',
+  registry: 'invalid orphan keys broken entries firewall rules fonts compatibility',
+  startup: 'boot time slow login logon run tasks how long to start',
   programs: 'uninstall remove apps software leftovers',
+  results: 'before after improvement difference compare results what changed progress faster report customer',
+  running: 'task manager processes end task kill program memory hog background what is running slow',
   stress: 'burn in crash freeze overheating temperature restart random reboot unstable overclock benchmark disk speed load test ram cpu gpu',
   kit: 'backup reinstall wipe format factory reset documents desktop pictures bookmarks save customer data usb before',
   apps: 'update upgrade outdated winget software programs',

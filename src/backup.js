@@ -88,11 +88,19 @@ $out = New-Object System.Collections.ArrayList
 [void]$out.Add('Windows Registry Editor Version 5.00')
 [void]$out.Add('')
 
+$keys = @{}
 foreach ($item in @($Payload)) {
   if ($item.valueName) {
-    $key = Get-Item -LiteralPath $item.psPath -ErrorAction SilentlyContinue
+    # One key can hold thousands of values, so each is only read once.
+    if (-not $keys.ContainsKey($item.psPath)) {
+      $found = Get-Item -LiteralPath $item.psPath -ErrorAction SilentlyContinue
+      $names = $null
+      if ($found) { $names = New-Object 'System.Collections.Generic.HashSet[string]' ([string[]]$found.GetValueNames()), ([StringComparer]::OrdinalIgnoreCase) }
+      $keys[$item.psPath] = @{ key = $found; names = $names }
+    }
+    $key = $keys[$item.psPath].key
     if (-not $key) { continue }
-    if (-not ($key.GetValueNames() -contains $item.valueName)) { continue }
+    if (-not $keys[$item.psPath].names.Contains([string]$item.valueName)) { continue }
 
     $kind = [string]$key.GetValueKind($item.valueName)
     $code = $kindToCode[$kind]
@@ -135,7 +143,7 @@ foreach ($item in @($Payload)) {
 
 [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes(($out -join "\`r\`n")))
 `,
-    { timeout: 120000 }
+    { timeout: 300000 }
   );
 
   const trimmed = encoded.trim();

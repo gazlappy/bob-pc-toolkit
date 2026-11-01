@@ -48,6 +48,31 @@ const CATEGORIES = {
     description: 'Startup registrations whose program no longer exists, so they fail silently at every sign-in.',
     safety: 'Safe. These already do nothing.',
   },
+  compat: {
+    label: 'Compatibility records for programs that are gone',
+    description: 'Windows notes every program it has run and any compatibility settings it was given. These are for files that no longer exist.',
+    safety: 'Safe. Windows adds a new record if the program comes back.',
+  },
+  firewall: {
+    label: 'Firewall rules for programs that are gone',
+    description: 'Rules left behind by removed programs and games, so the firewall still has openings for files that no longer exist.',
+    safety: "Safe. The program is gone, and if it comes back Windows asks about it again. Windows' own rules are left alone.",
+  },
+  fonts: {
+    label: 'Fonts whose files are gone',
+    description: 'Font registrations pointing at files that no longer exist.',
+    safety: 'Safe. These fonts cannot be used anyway.',
+  },
+  openWith: {
+    label: '"Open with" entries for programs that are gone',
+    description: 'Programs still offered in the "Open with" list although their files no longer exist.',
+    safety: 'Safe. Only removes a dead choice from that list.',
+  },
+  installerFolders: {
+    label: 'Installer records for folders that are gone',
+    description: 'Windows Installer keeps a list of the folders programs were installed to. These folders no longer exist.',
+    safety: 'Low risk. A program that needs one recreates it when repaired or reinstalled.',
+  },
 };
 
 const SCAN_SCRIPT = `
@@ -129,7 +154,9 @@ $result['muiCache'] = @(Read-Values 'HKCU:\\SOFTWARE\\Classes\\Local Settings\\S
 $runKeys = @(
   @{ hive = 'HKCU'; sub = 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' },
   @{ hive = 'HKLM'; sub = 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' },
-  @{ hive = 'HKLM'; sub = 'SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run' }
+  @{ hive = 'HKLM'; sub = 'SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run' },
+  @{ hive = 'HKCU'; sub = 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce' },
+  @{ hive = 'HKLM'; sub = 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce' }
 )
 $runs = New-Object System.Collections.ArrayList
 foreach ($root in $runKeys) {
@@ -138,6 +165,62 @@ foreach ($root in $runKeys) {
   }
 }
 $result['startup'] = @($runs)
+
+# --- Compatibility records -----------------------------------------------
+$compat = New-Object System.Collections.ArrayList
+foreach ($root in @(
+  @{ hive = 'HKCU'; sub = 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Compatibility Assistant\\Store' },
+  @{ hive = 'HKCU'; sub = 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' },
+  @{ hive = 'HKLM'; sub = 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers' }
+)) {
+  $key = Get-Item -LiteralPath ($root.hive + ':\\' + $root.sub) -ErrorAction SilentlyContinue
+  if (-not $key) { continue }
+  foreach ($name in $key.GetValueNames()) { if ($name) { [void]$compat.Add([pscustomobject]@{ hive = $root.hive; subKey = $root.sub; name = $name }) } }
+}
+$result['compat'] = @($compat)
+
+# --- Firewall rules ------------------------------------------------------
+$firewallSub = 'SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules'
+$firewall = New-Object System.Collections.ArrayList
+$key = Get-Item -LiteralPath ('HKLM:\\' + $firewallSub) -ErrorAction SilentlyContinue
+if ($key) {
+  foreach ($name in $key.GetValueNames()) {
+    $rule = [string]$key.GetValue($name, '', 'DoNotExpandEnvironmentNames')
+    if ($rule -notmatch '(?i)\\|App=([^|]+)\\|') { continue }
+    $app = $Matches[1]
+    $label = ''
+    if ($rule -match '(?i)\\|Name=([^|]+)\\|') { $label = $Matches[1] }
+    [void]$firewall.Add([pscustomobject]@{ subKey = $firewallSub; name = $name; app = $app; label = $label })
+  }
+}
+$result['firewall'] = @($firewall)
+
+# --- Fonts ---------------------------------------------------------------
+$fonts = New-Object System.Collections.ArrayList
+foreach ($root in @(@{ hive = 'HKLM' }, @{ hive = 'HKCU' })) {
+  $sub = 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'
+  foreach ($row in (Read-Values ($root.hive + ':\\' + $sub))) {
+    [void]$fonts.Add([pscustomobject]@{ hive = $root.hive; subKey = $sub; name = $row.name; value = $row.value })
+  }
+}
+$result['fonts'] = @($fonts)
+
+# --- Open with -----------------------------------------------------------
+$openWith = New-Object System.Collections.ArrayList
+foreach ($root in @(@{ hive = 'HKCU' }, @{ hive = 'HKLM' })) {
+  $sub = 'SOFTWARE\\Classes\\Applications'
+  foreach ($child in (Get-ChildItem -LiteralPath ($root.hive + ':\\' + $sub) -ErrorAction SilentlyContinue)) {
+    $command = Get-Item -LiteralPath ($child.PSPath + '\\shell\\open\\command') -ErrorAction SilentlyContinue
+    if (-not $command) { continue }
+    [void]$openWith.Add([pscustomobject]@{ hive = $root.hive; subKey = $sub + '\\' + $child.PSChildName; name = $child.PSChildName; command = [string]$command.GetValue('') })
+  }
+}
+$result['openWith'] = @($openWith)
+
+# --- Installer folders ---------------------------------------------------
+$result['installerFolders'] = @()
+$key = Get-Item -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Folders' -ErrorAction SilentlyContinue
+if ($key) { $result['installerFolders'] = @($key.GetValueNames() | Where-Object { $_ }) }
 
 [pscustomobject]$result | ConvertTo-Json -Depth 5 -Compress
 `;
@@ -189,6 +272,17 @@ function executableFrom(command) {
   return '';
 }
 
+// Only "not there" counts as missing. Being refused a look proves nothing: Windows
+// keeps Store apps in a folder most accounts can't read.
+async function pathExists(target) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch (error) {
+    return !(error.code === 'ENOENT' || error.code === 'ENOTDIR');
+  }
+}
+
 /**
  * Decides whether a referenced path counts as "definitely missing".
  * Anything unmounted, relative, or not a plain drive path is treated as
@@ -206,12 +300,11 @@ async function isDefinitelyMissing(target) {
   if (!drive) return false; // relative or an odd form — not our business
   if (!mountedDrives || !mountedDrives.has(drive[1].toUpperCase())) return false;
 
-  try {
-    await fs.access(clean);
-    return false;
-  } catch {
-    return true;
-  }
+  if (await pathExists(clean)) return false;
+
+  // A 32-bit program's "System32" is really SysWOW64.
+  const wow = clean.replace(/\\(system32|sysnative)(?=\\|$)/i, '\\SysWOW64');
+  return wow === clean || !(await pathExists(wow));
 }
 
 function makeFinding(category, details) {
@@ -361,6 +454,97 @@ async function scan(onProgress) {
     );
   });
 
+  // --- Compatibility records ---------------------------------------------
+  report('Checking compatibility records');
+  await walker.pool(ps.arr(raw.compat), 48, async (row) => {
+    if (!(await isDefinitelyMissing(row.name))) return;
+    findings.push(
+      makeFinding('compat', {
+        hive: row.hive,
+        subKey: row.subKey,
+        valueName: row.name,
+        name: path.basename(row.name),
+        detail: path.dirname(row.name),
+        missingPath: row.name,
+      })
+    );
+  });
+
+  // --- Firewall rules ----------------------------------------------------
+  report('Checking firewall rules');
+  const windowsFolder = String(process.env.SystemRoot || 'C:\\Windows').toLowerCase();
+  await walker.pool(ps.arr(raw.firewall), 48, async (row) => {
+    // Windows ships rules for optional features that aren't installed. Those carry
+    // a resource name or live under its own folder, and they aren't junk.
+    if (String(row.label || '').startsWith('@')) return;
+    const app = expandEnvironment(row.app);
+    if (app.toLowerCase().startsWith(`${windowsFolder}\\`)) return;
+    if (!(await isDefinitelyMissing(app))) return;
+    findings.push(
+      makeFinding('firewall', {
+        hive: 'HKLM',
+        subKey: row.subKey,
+        valueName: row.name,
+        name: row.label || path.basename(app),
+        detail: 'Firewall rule',
+        missingPath: app,
+      })
+    );
+  });
+
+  // --- Fonts -------------------------------------------------------------
+  report('Checking fonts');
+  await walker.pool(ps.arr(raw.fonts), 48, async (row) => {
+    const file = String(row.value || '').trim();
+    // Older entries can carry extra numbers after the file name. Not provable, so skipped.
+    if (!/\.(ttf|ttc|otf|fon|fot)$/i.test(file)) return;
+    const full = /^[A-Za-z]:[\\/]/.test(file) ? file : path.join(windowsFolder, 'Fonts', file);
+    if (!(await isDefinitelyMissing(full))) return;
+    findings.push(
+      makeFinding('fonts', {
+        hive: row.hive,
+        subKey: row.subKey,
+        valueName: row.name,
+        name: row.name,
+        detail: 'Font',
+        missingPath: full,
+      })
+    );
+  });
+
+  // --- Open with ---------------------------------------------------------
+  report('Checking "Open with" entries');
+  await walker.pool(ps.arr(raw.openWith), 32, async (row) => {
+    const target = executableFrom(row.command);
+    if (!target || !(await isDefinitelyMissing(target))) return;
+    findings.push(
+      makeFinding('openWith', {
+        hive: row.hive,
+        subKey: row.subKey,
+        name: row.name,
+        detail: 'Open with entry',
+        missingPath: expandEnvironment(target),
+      })
+    );
+  });
+
+  // --- Installer folders -------------------------------------------------
+  report('Checking installer records');
+  await walker.pool(ps.arr(raw.installerFolders), 64, async (folder) => {
+    const clean = String(folder).replace(/[\\/]+$/, '');
+    if (!(await isDefinitelyMissing(clean))) return;
+    findings.push(
+      makeFinding('installerFolders', {
+        hive: 'HKLM',
+        subKey: 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Folders',
+        valueName: folder,
+        name: path.basename(clean),
+        detail: path.dirname(clean),
+        missingPath: clean,
+      })
+    );
+  });
+
   findingCache = new Map(findings.map((finding) => [finding.id, finding]));
 
   const groups = Object.entries(CATEGORIES).map(([id, meta]) => {
@@ -390,6 +574,8 @@ async function clean(ids) {
 
   const request = chosen.map((finding) => ({
     psPath: `${finding.hive}:\\${finding.subKey}`,
+    hive: finding.hive,
+    subKey: finding.subKey,
     valueName: finding.valueName,
   }));
 
@@ -398,10 +584,18 @@ async function clean(ids) {
 ${ps.payload(request)}
 $removed = 0
 $failed = New-Object System.Collections.ArrayList
+$open = @{}
 foreach ($item in @($Payload)) {
   try {
     if ($item.valueName) {
-      Remove-ItemProperty -LiteralPath $item.psPath -Name $item.valueName -Force -ErrorAction Stop
+      # Value names are file paths here, and PowerShell would read [ and ] in one as a pattern.
+      $id = $item.hive + '|' + $item.subKey
+      if (-not $open.ContainsKey($id)) {
+        $root = if ($item.hive -eq 'HKLM') { [Microsoft.Win32.Registry]::LocalMachine } else { [Microsoft.Win32.Registry]::CurrentUser }
+        $open[$id] = $root.OpenSubKey($item.subKey, $true)
+      }
+      if (-not $open[$id]) { throw 'That key could not be opened for changes.' }
+      $open[$id].DeleteValue($item.valueName, $false)
     } else {
       Remove-Item -LiteralPath $item.psPath -Recurse -Force -ErrorAction Stop
     }
@@ -410,9 +604,10 @@ foreach ($item in @($Payload)) {
     [void]$failed.Add([pscustomobject]@{ path = $item.psPath; error = $_.Exception.Message })
   }
 }
+foreach ($k in $open.Values) { if ($k) { $k.Close() } }
 [pscustomobject]@{ removed = $removed; failed = @($failed) } | ConvertTo-Json -Depth 4 -Compress
 `,
-    { timeout: 120000 }
+    { timeout: 300000 }
   );
 
   for (const finding of chosen) findingCache.delete(finding.id);
@@ -424,4 +619,4 @@ foreach ($item in @($Payload)) {
   };
 }
 
-module.exports = { scan, clean, CATEGORIES, __internals: { executableFrom, isDefinitelyMissing, loadMountedDrives } };
+module.exports = { scan, clean, CATEGORIES, __internals: { executableFrom, isDefinitelyMissing, loadMountedDrives, pathExists } };

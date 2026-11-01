@@ -48,6 +48,8 @@ const malware = require('./src/malware');
 const apps = require('./src/apps');
 const kit = require('./src/kit');
 const stress = require('./src/stress');
+const running = require('./src/running');
+const progressReport = require('./src/progress');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -329,6 +331,13 @@ handle('sys:copy', (text) => {
 });
 
 handle('startup:list', () => startup.list());
+handle('startup:boot', () => startup.bootReport());
+handle('results:get', () => progressReport.get());
+handle('results:newBefore', () => progressReport.newBefore());
+handle('results:saveAfter', () => progressReport.saveAfter());
+handle('running:list', () => running.list());
+handle('running:end', (key) => running.end(key));
+handle('running:reveal', (key) => running.reveal(key));
 handle('startup:tasks', () => startup.tasks());
 handle('startup:setEnabled', (id, enabled) => startup.setEnabled(id, enabled));
 handle('startup:remove', (id) => startup.remove(id));
@@ -462,6 +471,8 @@ app.whenReady().then(() => {
   // Pay PowerShell's ~1.4s cold start now, while the window is still painting,
   // rather than on the user's first click.
   ps.warmUp();
+  // The Before readings have to exist before anyone changes anything on this PC.
+  setTimeout(() => progressReport.ensureBefore().catch(() => {}), 8000);
 });
 
 // A card left on a fixed fan speed with BOB gone has nobody watching its

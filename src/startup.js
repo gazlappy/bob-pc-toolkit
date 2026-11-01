@@ -41,10 +41,59 @@ $locations = @(
   @{ id = 'hklm-run';     reg = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';              approval = '${APPROVED_HKLM}\\Run';   label = 'Registry (all users)';         scope = 'machine' },
   @{ id = 'hklm-run32';   reg = 'HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run'; approval = '${APPROVED_HKLM}\\Run32'; label = 'Registry (all users, 32-bit)'; scope = 'machine' },
   @{ id = 'hkcu-runonce'; reg = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';          approval = '';                        label = 'Run once (you)';               scope = 'user' },
+  @{ id = 'hkcu-run32';   reg = 'HKCU:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run'; approval = '${APPROVED_HKCU}\\Run32'; label = 'Registry (you, 32-bit)'; scope = 'user' },
+  @{ id = 'hkcu-policy';  reg = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run'; approval = ''; label = 'Set by policy (you)'; scope = 'user' },
+  @{ id = 'hklm-policy';  reg = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run'; approval = ''; label = 'Set by policy (all users)'; scope = 'machine' },
   @{ id = 'hklm-runonce'; reg = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';          approval = '';                        label = 'Run once (all users)';         scope = 'machine' }
 )
 
 $entries = New-Object System.Collections.ArrayList
+
+# Store-type apps register their own startup tasks, which Task Manager lists too.
+$appRoot = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\SystemAppData'
+# In its own try, so trouble here can't lose the ordinary startup items below.
+try {
+if (Test-Path -LiteralPath $appRoot) {
+  $packages = @{}
+  foreach ($p in (Get-AppxPackage -ErrorAction SilentlyContinue)) { $packages[[string]$p.PackageFamilyName] = $p }
+  foreach ($family in (Get-ChildItem -LiteralPath $appRoot -ErrorAction SilentlyContinue)) {
+    $package = $packages[[string]$family.PSChildName]
+    if (-not $package) { continue }
+    $tasks = @(Get-ChildItem -LiteralPath $family.PSPath -ErrorAction SilentlyContinue | Where-Object { $null -ne (Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue).State })
+    if (-not $tasks.Count) { continue }
+    $manifest = Get-AppxPackageManifest -Package $package -ErrorAction SilentlyContinue
+    $display = if ($manifest) { [string]$manifest.Package.Properties.DisplayName } else { '' }
+    $company = if ($manifest) { [string]$manifest.Package.Properties.PublisherDisplayName } else { '' }
+    if (-not $display -or $display -like 'ms-resource*') { $display = ([string]$package.Name -replace '^[^.]+\\.', '') -creplace '([a-z])([A-Z])', '$1 $2' }
+    if ($company -like 'ms-resource*') { $company = '' }
+    foreach ($task in $tasks) {
+      $state = [int](Get-ItemProperty -LiteralPath $task.PSPath).State
+      $exe = ''
+      if ($manifest) {
+        $node = $manifest.SelectNodes("//*[local-name()='StartupTask']") | Where-Object { $_.GetAttribute('TaskId') -eq $task.PSChildName } | Select-Object -First 1
+        if ($node -and $node.ParentNode.GetAttribute('Executable')) { $exe = Join-Path $package.InstallLocation $node.ParentNode.GetAttribute('Executable') }
+      }
+      $part = ([string]$task.PSChildName -replace 'StartupTask$', '') -replace ('^' + [regex]::Escape(($display -replace ' ', ''))), ''
+      $label = if ($tasks.Count -gt 1 -and $part) { $display + ' (' + ($part -creplace '([a-z])([A-Z])', '$1 $2') + ')' } else { $display }
+      [void]$entries.Add([pscustomobject]@{
+        kind        = 'packaged'
+        locationId  = 'packaged'
+        location    = 'Windows Store-type app'
+        scope       = 'user'
+        registryKey = [string]($appRoot + '\\' + $family.PSChildName + '\\' + $task.PSChildName)
+        approvalKey = ''
+        valueName   = [string]($family.PSChildName + '\\' + $task.PSChildName)
+        name        = $label
+        command     = $exe
+        filePath    = ''
+        enabled     = ($state -eq 2 -or $state -eq 4)
+        approvable  = ($state -le 2)
+        publisher   = $company
+      })
+    }
+  }
+}
+} catch { }
 
 foreach ($location in $locations) {
   if (-not (Test-Path $location.reg)) { continue }
@@ -179,6 +228,72 @@ ${ps.payload(paths)}
   return map;
 }
 
+async function runningNow() {
+  const rows = ps.arr(await ps.json(`
+$ErrorActionPreference = 'SilentlyContinue'
+$own = @{}
+foreach ($p in (Get-CimInstance Win32_PerfFormattedData_PerfProc_Process)) { $own[[int]$p.IDProcess] = [double]$p.WorkingSetPrivate }
+@(Get-Process | Where-Object { $_.Path } | Group-Object Path | ForEach-Object {
+  $bytes = 0
+  foreach ($p in $_.Group) { $bytes += [double]$own[[int]$p.Id] }
+  [pscustomobject]@{ path = [string]$_.Name; count = $_.Count; bytes = $bytes }
+}) | ConvertTo-Json -Compress
+`, { timeout: 15000 }).catch(() => []));
+  const map = {};
+  for (const row of rows) map[String(row.path).toLowerCase()] = { count: row.count, bytes: row.bytes };
+  return map;
+}
+
+// Windows times every boot and names what held it up, but only shows admins. These
+// are its own figures: 100 is the boot, 101 a program, 102 a driver, 103 a service.
+const BOOT_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$since = (Get-Date).AddDays(-30)
+$events = @()
+try {
+  $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Diagnostics-Performance/Operational'; Id = 100,101,102,103; StartTime = $since } -MaxEvents 500)
+} catch { }
+$rows = foreach ($e in $events) {
+  $d = @{}
+  foreach ($n in ([xml]$e.ToXml()).Event.EventData.Data) { $d[[string]$n.Name] = [string]$n.'#text' }
+  [pscustomobject]@{
+    id = [int]$e.Id
+    when = $e.TimeCreated.ToString('o')
+    total = [double]$d['BootTime']
+    main = [double]$d['MainPathBootTime']
+    post = [double]$d['BootPostBootTime']
+    name = $d['FriendlyName']
+    file = $d['Name']
+    slower = [double]$d['DegradationTime']
+  }
+}
+[pscustomobject]@{ admin = $admin; rows = @($rows) } | ConvertTo-Json -Depth 3 -Compress
+`;
+
+async function bootReport() {
+  const data = await ps.json(BOOT_SCRIPT, { timeout: 30000 }).catch(() => null);
+  if (!data) return { readable: false, admin: false, boots: [], history: [], slow: [] };
+  const rows = ps.arr(data.rows);
+  const history = rows.filter((r) => r.id === 100 && r.total > 0).map((r) => ({ when: r.when, total: r.total, main: r.main, post: r.post }));
+  const boots = history.slice(0, 5);
+  const byFile = new Map();
+  for (const r of rows) {
+    if (r.id === 100 || !r.file) continue;
+    const key = r.file.toLowerCase();
+    const item = byFile.get(key) || { file: r.file, name: r.name || r.file, kind: { 101: 'Program', 102: 'Driver', 103: 'Service' }[r.id], times: 0, total: 0, worst: 0, last: r.when };
+    item.times += 1;
+    item.total += r.slower;
+    item.worst = Math.max(item.worst, r.slower);
+    if (r.when > item.last) item.last = r.when;
+    byFile.set(key, item);
+  }
+  const slow = [...byFile.values()]
+    .map((item) => ({ file: item.file, name: item.name, kind: item.kind, times: item.times, worst: item.worst, typical: Math.round(item.total / item.times), last: item.last }))
+    .sort((a, b) => b.typical - a.typical);
+  return { readable: Boolean(rows.length), admin: Boolean(data.admin), boots, history, slow };
+}
+
 async function iconFor(filePath) {
   const key = filePath.toLowerCase();
   if (iconCache.has(key)) return iconCache.get(key);
@@ -222,7 +337,7 @@ async function list() {
   }));
 
   const executables = [...new Set(entries.map((entry) => entry.executable).filter(Boolean))];
-  const details = await describeFiles(executables);
+  const [details, running] = await Promise.all([describeFiles(executables), runningNow()]);
   const icons = new Map();
   await Promise.all(
     executables.map(async (filePath) => {
@@ -233,8 +348,9 @@ async function list() {
   cache = new Map();
   for (const entry of entries) {
     const detail = details[entry.executable.toLowerCase()] || {};
-    entry.publisher = detail.publisher || '';
-    entry.product = detail.product || '';
+    entry.publisher = entry.publisher || detail.publisher || '';
+    entry.product = entry.kind === 'packaged' ? '' : detail.product || '';
+    entry.running = running[entry.executable.toLowerCase()] || null;
     entry.missing = entry.executable ? detail.exists === false : false;
     entry.icon = icons.get(entry.executable.toLowerCase()) || null;
     cache.set(entry.id, entry);
@@ -252,7 +368,15 @@ function requireEntry(id) {
 async function setEnabled(id, enabled) {
   const entry = requireEntry(id);
   if (!entry.approvable) {
-    throw new Error('Run-once entries cannot be disabled — they remove themselves after running.');
+    throw new Error('This one cannot be switched off from here. Run-once entries remove themselves after running, and policy entries are set by whoever manages this PC.');
+  }
+  if (entry.kind === 'packaged') {
+    await ps.mutate(`
+${ps.payload({ key: entry.registryKey, state: enabled ? 2 : 1 })}
+  Set-ItemProperty -LiteralPath $Payload.key -Name State -Value ([int]$Payload.state) -Type DWord -Force
+`);
+    entry.enabled = Boolean(enabled);
+    return entry;
   }
   await ps.mutate(`
 ${ps.payload({ key: entry.approvalKey, name: entry.valueName, enabled: Boolean(enabled) })}
@@ -270,6 +394,7 @@ ${ps.payload({ key: entry.approvalKey, name: entry.valueName, enabled: Boolean(e
 
 async function remove(id) {
   const entry = requireEntry(id);
+  if (entry.kind === 'packaged') throw new Error('This belongs to an installed app. Switch it off here, or uninstall the app in Programs.');
 
   // Registry entries are written to a restore point first, so removing one is
   // recoverable from the Backups tab rather than being permanent.
@@ -324,6 +449,7 @@ ${ps.payload({ key: entry.approvalKey, name: entry.valueName })}
 
 async function reveal(id) {
   const entry = requireEntry(id);
+  if (entry.kind === 'packaged') throw new Error('Windows keeps Store-type apps in a protected folder.');
   const target = entry.kind === 'folder' ? entry.filePath : entry.executable;
   if (!target) throw new Error('There is no file to show for this item.');
   shell.showItemInFolder(target);
@@ -345,6 +471,7 @@ ${ps.payload({ taskPath, taskName, enabled: Boolean(enabled) })}
 module.exports = {
   list,
   tasks,
+  bootReport,
   setEnabled,
   remove,
   reveal,
