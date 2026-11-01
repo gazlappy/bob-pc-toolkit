@@ -5,6 +5,8 @@ const $ = (id) => document.getElementById(id);
 const state = {
   admin: false,
   startup: { entries: [], tasks: [], search: '', showWindowsTasks: false, tasksLoaded: false },
+  prefs: null,
+  currentView: 'overview',
   tuneup: { suggestions: [], summary: null, changes: [], selected: new Set(), results: null, scanned: false, loaded: false, busy: false, admin: false },
   cleanup: { targets: [], profiles: [], selected: new Set(), scanned: false, report: null, cleaning: false },
   files: { results: null, selected: new Set(), roots: [], mode: 'list' },
@@ -116,9 +118,45 @@ function empty(message) {
 
 /* Navigation --------------------------------------------------------------- */
 
+// Six sections on the rail, each with its tools as tabs. Which section a tool
+// belongs to comes from the tab markup, so moving a tool is a one-line HTML edit.
+const SECTION_OF = {};
+for (const group of document.querySelectorAll('.tabs')) {
+  for (const tab of group.querySelectorAll('.tab')) SECTION_OF[tab.dataset.view] = group.dataset.section;
+}
+SECTION_OF.overview = 'home';
+const lastTab = { home: 'overview' };
+
+function showSection(section) {
+  const first = document.querySelector(`.tabs[data-section="${section}"] .tab`);
+  show(lastTab[section] || (first ? first.dataset.view : 'overview'));
+}
+
 function show(view) {
-  for (const button of document.querySelectorAll('.nav-item')) {
-    button.classList.toggle('is-active', button.dataset.view === view);
+  const section = SECTION_OF[view] || 'home';
+  lastTab[section] = view;
+  state.currentView = view;
+  if (state.prefs && state.prefs.startView === 'last' && state.prefs.lastView !== view) {
+    state.prefs.lastView = view;
+    window.pc.settings.set('lastView', view).catch(() => {});
+  }
+  for (const item of document.querySelectorAll('.rail-item')) {
+    const on = item.dataset.section === section;
+    item.classList.toggle('is-active', on);
+    if (on) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current');
+  }
+  $('tabbar').hidden = section === 'home';
+  for (const group of document.querySelectorAll('.tabs')) {
+    const on = group.dataset.section === section;
+    group.hidden = !on;
+    if (on) $('tabbar-title').textContent = group.dataset.title;
+  }
+  for (const tab of document.querySelectorAll('.tab')) {
+    const on = tab.dataset.view === view;
+    tab.classList.toggle('is-active', on);
+    if (on) tab.setAttribute('aria-current', 'page');
+    else tab.removeAttribute('aria-current');
   }
   for (const section of document.querySelectorAll('.view')) {
     section.classList.toggle('is-active', section.id === `view-${view}`);
@@ -152,16 +190,41 @@ function show(view) {
   if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
   if (view === 'tuneup' && !state.tuneup.loaded) loadTuneup();
+  if (view === 'settings') loadSettings();
   if (view === 'update' && !state.update.loaded) loadUpdate();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
   if (view === 'backups') loadBackups();
 }
 
-document.querySelector('#nav').addEventListener('click', (event) => {
-  const button = event.target.closest('.nav-item');
-  if (button) show(button.dataset.view);
+$('rail').addEventListener('click', (event) => {
+  const item = event.target.closest('.rail-item');
+  if (item) showSection(item.dataset.section);
 });
+
+$('tabbar').addEventListener('click', (event) => {
+  const tab = event.target.closest('.tab');
+  if (tab) show(tab.dataset.view);
+});
+
+// The rail badge adds up the tabs that mean "needs attention" (not sizes or
+// totals). Those counts are set from all over this file, so watch them here.
+function updateRailBadges() {
+  for (const item of document.querySelectorAll('.rail-item')) {
+    let total = 0;
+    for (const count of document.querySelectorAll(`.tabs[data-section="${item.dataset.section}"] [data-attention]`)) {
+      total += parseInt(count.textContent, 10) || 0;
+    }
+    const badge = item.querySelector('.rail-badge');
+    badge.textContent = total ? String(total) : '';
+    badge.hidden = !total;
+  }
+}
+const railBadgeWatch = new MutationObserver(updateRailBadges);
+for (const count of document.querySelectorAll('[data-attention]')) {
+  railBadgeWatch.observe(count, { childList: true, characterData: true, subtree: true });
+}
+document.querySelector('.rail-item[data-section="home"]').classList.add('is-active');
 
 for (const tile of document.querySelectorAll('.tile')) {
   tile.addEventListener('click', () => show(tile.dataset.goto));
@@ -178,7 +241,8 @@ async function loadOverview() {
 
     const card = $('admin-card');
     card.classList.toggle('is-admin', info.admin);
-    $('admin-state').textContent = info.admin
+    $('admin-state').textContent = info.admin ? 'Admin' : 'Standard user';
+    card.title = info.admin
       ? 'Running as administrator'
       : 'Running as a standard user. System-wide items are read-only.';
     $('elevate').hidden = info.admin;
@@ -1095,8 +1159,10 @@ async function scanTuneup() {
     state.tuneup.changes = r.changes;
     state.tuneup.admin = r.admin;
     state.tuneup.scanned = true;
-    // Start with the recommended changes ticked; the tech adjusts from there.
-    state.tuneup.selected = new Set(r.suggestions.filter((s) => tuneSelectable(s) && s.recommended).map((s) => s.id));
+    // Start with the recommended changes ticked (unless turned off in Settings);
+    // the tech adjusts from there.
+    const pretick = !state.prefs || state.prefs.pretickRecommended;
+    state.tuneup.selected = new Set(pretick ? r.suggestions.filter((s) => tuneSelectable(s) && s.recommended).map((s) => s.id) : []);
     $('tuneup-scan').textContent = 'Scan again';
     $('tuneup-scan').className = 'btn btn-ghost';
     renderTuneup();
@@ -3944,7 +4010,7 @@ function renderAccounts() {
     lead.textContent = 'Read-only — not running as administrator';
     const sub = document.createElement('div');
     sub.className = 'ar-summary-sub';
-    sub.textContent = 'You can see the accounts, but creating, resetting or changing one needs admin. Restart as admin from the banner on the left.';
+    sub.textContent = 'You can see the accounts, but creating, resetting or changing one needs admin. Restart as admin with the button at the bottom left.';
     b.append(lead, sub);
     banner.append(b);
   }
@@ -4976,7 +5042,7 @@ function renderBitlocker() {
     lead.textContent = 'Needs administrator rights';
     const sub = document.createElement('div');
     sub.className = 'ar-summary-sub';
-    sub.textContent = 'Windows only reveals BitLocker status and recovery keys to an administrator. Restart as admin from the banner on the left.';
+    sub.textContent = 'Windows only reveals BitLocker status and recovery keys to an administrator. Restart as admin with the button at the bottom left.';
     b.append(lead, sub);
     banner.append(b);
     body.replaceChildren();
@@ -7007,6 +7073,165 @@ $('backups-folder').addEventListener('click', () => {
   window.pc.backups.reveal().catch((error) => toast(error.message, 'error'));
 });
 
+/* Settings ------------------------------------------------------------------ */
+
+function applyTheme(name) {
+  document.documentElement.setAttribute('data-theme', name);
+}
+
+// The Match Windows card previews what Windows is set to, whatever BOB is using.
+function previewSystemTheme(name) {
+  document.querySelector('[data-theme-choice="system"] .theme-preview').setAttribute('data-theme', name);
+}
+
+window.pc.settings.onThemeChange((name) => {
+  applyTheme(name);
+  previewSystemTheme(name);
+});
+
+for (const card of document.querySelectorAll('.theme-card')) {
+  card.addEventListener('click', async () => {
+    try {
+      renderSettings(await window.pc.settings.set('theme', card.dataset.themeChoice));
+      settingsSaved();
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+}
+
+function renderSettings(view) {
+  state.prefs = view.prefs;
+  applyTheme(view.theme);
+  previewSystemTheme(view.systemTheme);
+  for (const card of document.querySelectorAll('.theme-card')) {
+    card.setAttribute('aria-pressed', String(card.dataset.themeChoice === view.prefs.theme));
+  }
+  for (const input of document.querySelectorAll('[data-pref]')) {
+    const value = view.prefs[input.dataset.pref];
+    if (input.type === 'checkbox') input.checked = Boolean(value);
+    else input.value = String(value);
+  }
+  $('set-nvflash').textContent = view.nvflash || 'Not found. BOB also looks next to BOB.exe.';
+  $('set-version').textContent = `BOB ${view.version}`;
+}
+
+async function loadSettings() {
+  try {
+    renderSettings(await window.pc.settings.get());
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+let settingsSavedTimer = null;
+function settingsSaved() {
+  $('settings-subtitle').textContent = 'Saved.';
+  clearTimeout(settingsSavedTimer);
+  settingsSavedTimer = setTimeout(() => {
+    $('settings-subtitle').textContent = 'Changes save as you make them.';
+  }, 2000);
+}
+
+// What is already on screen elsewhere has to pick up the new value.
+function settingChanged(key) {
+  if (key === 'fanWatchdogTemp') state.gpu.data = null;
+  if (key === 'startView' && state.prefs.startView === 'last') {
+    state.prefs.lastView = state.currentView;
+    window.pc.settings.set('lastView', state.currentView).catch(() => {});
+  }
+  if ((key === 'tempKeepDays' || key === 'cleanAllProfiles') && state.cleanup.scanned) {
+    toast('Scan Cleanup again to see the new figures. A clean always follows the new setting.', 'good');
+  }
+}
+
+for (const input of document.querySelectorAll('[data-pref]')) {
+  input.addEventListener('change', async () => {
+    const key = input.dataset.pref;
+    const value = input.type === 'checkbox' ? input.checked : 'number' in input.dataset ? Number(input.value) : input.value;
+    try {
+      renderSettings(await window.pc.settings.set(key, value));
+      settingChanged(key);
+      settingsSaved();
+    } catch (error) {
+      toast(error.message, 'error');
+      loadSettings();
+    }
+  });
+}
+
+$('settings-reset').addEventListener('click', async () => {
+  const ok = await confirmAction({
+    title: 'Reset settings to defaults?',
+    body: 'This only resets the choices on this page. Your update source, nvflash location, backups and Tune-up undo list are kept.',
+    confirmLabel: 'Reset',
+    danger: false,
+  });
+  if (!ok) return;
+  try {
+    renderSettings(await window.pc.settings.reset());
+    settingChanged('fanWatchdogTemp');
+    settingsSaved();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+function settingsNvflashChanged(path) {
+  if (state.gpu.data) state.gpu.data.nvflash = path;
+  if (state.gpu.active && state.gpu.data) renderGpu();
+  loadSettings();
+}
+
+$('set-nvflash-locate').addEventListener('click', async () => {
+  try {
+    const r = await window.pc.gpu.locateNvflash();
+    if (r.canceled) return;
+    settingsNvflashChanged(r.path);
+    settingsSaved();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+$('set-nvflash-forget').addEventListener('click', async () => {
+  try {
+    const r = await window.pc.settings.forgetNvflash();
+    settingsNvflashChanged(r.path);
+    settingsSaved();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+// Quiet check at launch: a badge and a note if there is something newer, nothing
+// at all if there is not, if GitHub cannot be reached, or the PC is offline.
+async function startupUpdateCheck() {
+  try {
+    const r = await window.pc.update.check();
+    if (!r || !r.newer) return;
+    state.update.result = r;
+    $('nav-update-count').textContent = '1';
+    toast(`BOB ${r.latest} is available — see Settings › Update.`, 'good');
+    if (state.update.loaded) renderUpdate();
+  } catch {
+    /* not worth interrupting anyone */
+  }
+}
+
+async function applyStartupSettings() {
+  try {
+    const view = await window.pc.settings.get();
+    state.prefs = view.prefs;
+    if (view.prefs.startView === 'last' && view.prefs.lastView !== 'overview' && SECTION_OF[view.prefs.lastView]) {
+      show(view.prefs.lastView);
+    }
+    if (view.prefs.autoCheckUpdates) setTimeout(startupUpdateCheck, 3000);
+  } catch {
+    /* run on defaults */
+  }
+}
+
 /* Boot --------------------------------------------------------------------- */
 
 let bootHidden = false;
@@ -7022,6 +7247,7 @@ function hideBoot() {
 // Drop the loading overlay once the first data is in (or after a safety timeout
 // so a slow PowerShell call can never leave it stuck on screen).
 loadOverview().finally(hideBoot);
+applyStartupSettings();
 setTimeout(hideBoot, 6000);
 
 loadRoots();

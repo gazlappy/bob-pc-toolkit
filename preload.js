@@ -12,6 +12,14 @@ async function call(channel, ...args) {
   return result.data;
 }
 
+// Set the theme before the first paint so BOB never flashes the wrong colours.
+const startTheme = (process.argv.find((a) => a.startsWith('--bob-theme=')) || '').split('=')[1];
+if (startTheme) {
+  const setTheme = () => document.documentElement.setAttribute('data-theme', startTheme);
+  if (document.documentElement) setTheme();
+  else document.addEventListener('readystatechange', setTheme, { once: true });
+}
+
 contextBridge.exposeInMainWorld('pc', {
   overview: () => call('sys:overview'),
   elevate: () => call('sys:elevate'),
@@ -81,6 +89,18 @@ contextBridge.exposeInMainWorld('pc', {
     galleryStatus: () => call('tweaks:galleryStatus'),
     setGalleryHidden: (hidden) => call('tweaks:setGalleryHidden', hidden),
     restartExplorer: () => call('tweaks:restartExplorer'),
+  },
+
+  settings: {
+    onThemeChange: (handler) => {
+      const listener = (_event, name) => handler(name);
+      ipcRenderer.on('theme:changed', listener);
+      return () => ipcRenderer.removeListener('theme:changed', listener);
+    },
+    get: () => call('settings:get'),
+    set: (key, value) => call('settings:set', key, value),
+    reset: () => call('settings:reset'),
+    forgetNvflash: () => call('gpu:forgetNvflash'),
   },
 
   tuneup: {

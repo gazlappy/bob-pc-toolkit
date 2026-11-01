@@ -679,6 +679,15 @@ function settings() {
   return require('./settings');
 }
 
+function forgetNvflash() {
+  settings().set('nvflashPath', '');
+  return { path: findNvflash() };
+}
+
+function setWatchdogTemp(t) {
+  WATCHDOG_TEMP = t;
+}
+
 function setNvflashPath(p) {
   const file = String(p || '');
   if (!NVFLASH_NAME.test(path.basename(file))) throw new Error('Choose nvflash64.exe (or nvflash.exe).');
@@ -782,6 +791,8 @@ module.exports = {
   backupVbios,
   findNvflash,
   setNvflashPath,
+  forgetNvflash,
+  setWatchdogTemp,
   __internals: {
     archFromName, editability, looksLikeRom,
     parseSmi, decodeThrottle, busFromId, vendorOf, MIN_MANUAL_FAN,

@@ -19,142 +19,96 @@
     </div>
 
     <div class="shell">
-      <aside class="sidebar">
-        <nav id="nav">
-          <button class="nav-item is-active" data-view="overview">
-            <span class="nav-dot"></span>Overview
-          </button>
-
-          <div class="nav-group-label">Clean up</div>
-          <button class="nav-item" data-view="tuneup">
-            <span class="nav-dot"></span>Tune-up
-            <span class="nav-count" id="nav-tuneup-count"></span>
-          </button>
-          <button class="nav-item" data-view="cleanup">
-            <span class="nav-dot"></span>Cleanup
-            <span class="nav-count" id="nav-cleanup-count"></span>
-          </button>
-          <button class="nav-item" data-view="files">
-            <span class="nav-dot"></span>Large files
-          </button>
-          <button class="nav-item" data-view="dupes">
-            <span class="nav-dot"></span>Duplicates
-            <span class="nav-count" id="nav-dupes-count"></span>
-          </button>
-          <button class="nav-item" data-view="registry">
-            <span class="nav-dot"></span>Registry
-            <span class="nav-count" id="nav-registry-count"></span>
-          </button>
-          <button class="nav-item" data-view="explorer">
-            <span class="nav-dot"></span>Explorer tweaks
-          </button>
-
-          <div class="nav-group-label">Programs &amp; startup</div>
-          <button class="nav-item" data-view="programs">
-            <span class="nav-dot"></span>Programs
-            <span class="nav-count" id="nav-programs-count"></span>
-          </button>
-          <button class="nav-item" data-view="startup">
-            <span class="nav-dot"></span>Startup
-            <span class="nav-count" id="nav-startup-count"></span>
-          </button>
-
-          <div class="nav-group-label">Hardware</div>
-          <button class="nav-item" data-view="system">
-            <span class="nav-dot"></span>System info
-          </button>
-          <button class="nav-item" data-view="devices">
-            <span class="nav-dot"></span>Devices
-            <span class="nav-count" id="nav-devices-count"></span>
-          </button>
-          <button class="nav-item" data-view="disks">
-            <span class="nav-dot"></span>Disks &amp; partitions
-          </button>
-          <button class="nav-item" data-view="ghosts">
-            <span class="nav-dot"></span>Ghost devices
-            <span class="nav-count" id="nav-ghosts-count"></span>
-          </button>
-          <button class="nav-item" data-view="drivers">
-            <span class="nav-dot"></span>Driver export
-          </button>
-          <button class="nav-item" data-view="monitor">
-            <span class="nav-dot"></span>Performance
-          </button>
-          <button class="nav-item" data-view="gpu">
-            <span class="nav-dot"></span>Graphics card
-          </button>
-          <button class="nav-item" data-view="battery">
-            <span class="nav-dot"></span>Battery
-          </button>
-          <button class="nav-item" data-view="hwtest">
-            <span class="nav-dot"></span>Hardware test
-          </button>
-
-          <div class="nav-group-label">Network</div>
-          <button class="nav-item" data-view="network">
-            <span class="nav-dot"></span>Network
-          </button>
-          <button class="nav-item" data-view="wifi">
-            <span class="nav-dot"></span>Wi-Fi keys
-          </button>
-
-          <div class="nav-group-label">Security</div>
-          <button class="nav-item" data-view="security">
-            <span class="nav-dot"></span>Security
-            <span class="nav-count nav-count-warn" id="nav-security-count"></span>
-          </button>
-          <button class="nav-item" data-view="autoruns">
-            <span class="nav-dot"></span>Autoruns
-            <span class="nav-count nav-count-warn" id="nav-autoruns-count"></span>
-          </button>
-          <button class="nav-item" data-view="connections">
-            <span class="nav-dot"></span>Connections
-            <span class="nav-count nav-count-warn" id="nav-connections-count"></span>
-          </button>
-          <button class="nav-item" data-view="bitlocker">
-            <span class="nav-dot"></span>BitLocker
-          </button>
-
-          <div class="nav-group-label">Accounts &amp; keys</div>
-          <button class="nav-item" data-view="accounts">
-            <span class="nav-dot"></span>Accounts
-          </button>
-          <button class="nav-item" data-view="keys">
-            <span class="nav-dot"></span>Product keys
-          </button>
-
-          <div class="nav-group-label">Diagnose &amp; repair</div>
-          <button class="nav-item" data-view="report">
-            <span class="nav-dot"></span>Health report
-          </button>
-          <button class="nav-item" data-view="events">
-            <span class="nav-dot"></span>Event log
-          </button>
-          <button class="nav-item" data-view="repair">
-            <span class="nav-dot"></span>Repair
-          </button>
-          <button class="nav-item" data-view="toolbox">
-            <span class="nav-dot"></span>Toolbox
-          </button>
-          <button class="nav-item" data-view="update">
-            <span class="nav-dot"></span>Update
-            <span class="nav-count nav-count-warn" id="nav-update-count"></span>
-          </button>
-
-          <div class="nav-group-label">Safety net</div>
-          <button class="nav-item" data-view="backups">
-            <span class="nav-dot"></span>Backups
-            <span class="nav-count" id="nav-backups-count"></span>
-          </button>
-        </nav>
-
-        <div class="sidebar-foot">
-          <div class="admin-card" id="admin-card">
-            <div class="admin-state" id="admin-state">Checking permissions…</div>
-            <button class="btn btn-ghost btn-small" id="elevate" hidden>Restart as administrator</button>
-          </div>
+      <nav class="rail" id="rail" aria-label="Sections">
+        <button class="rail-item" data-section="home">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h14V10M10 20v-6h4v6"></path></svg>
+          <span class="rail-label">Home</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-section="clean">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 14l4-4M4 18a9 9 0 1 1 16 0"></path></svg>
+          <span class="rail-label">Clean &amp; speed</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-section="hardware">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"></path></svg>
+          <span class="rail-label">Hardware</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-section="network">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 13a10 10 0 0 1 13 0M9 16.5a5 5 0 0 1 6 0M12 20h.01"></path></svg>
+          <span class="rail-label">Network</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-section="security">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>
+          <span class="rail-label">Security</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item" data-section="repair">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.9 2.9-2.8-.7-.7-2.8z"></path></svg>
+          <span class="rail-label">Repair</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <button class="rail-item rail-settings" data-section="settings">
+          <svg class="rail-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span class="rail-label">Settings</span>
+          <span class="rail-badge" hidden></span>
+        </button>
+        <div class="rail-foot admin-card" id="admin-card">
+          <div class="admin-state" id="admin-state">Checking…</div>
+          <button class="btn btn-ghost btn-small" id="elevate" hidden>Restart as admin</button>
         </div>
-      </aside>
+      </nav>
+
+      <div class="workspace">
+        <header class="tabbar" id="tabbar" hidden>
+          <div class="tabbar-title" id="tabbar-title"></div>
+          <div class="tabs" data-section="clean" data-title="Clean &amp; speed" hidden>
+            <button class="tab" data-view="tuneup">Tune-up<span class="nav-count" id="nav-tuneup-count" data-attention></span></button>
+            <button class="tab" data-view="cleanup">Cleanup<span class="nav-count" id="nav-cleanup-count"></span></button>
+            <button class="tab" data-view="files">Large files</button>
+            <button class="tab" data-view="dupes">Duplicates<span class="nav-count" id="nav-dupes-count"></span></button>
+            <button class="tab" data-view="registry">Registry<span class="nav-count" id="nav-registry-count"></span></button>
+            <button class="tab" data-view="startup">Startup<span class="nav-count" id="nav-startup-count"></span></button>
+            <button class="tab" data-view="programs">Programs<span class="nav-count" id="nav-programs-count"></span></button>
+            <button class="tab" data-view="explorer">Explorer tweaks</button>
+          </div>
+          <div class="tabs" data-section="hardware" data-title="Hardware" hidden>
+            <button class="tab" data-view="system">System info</button>
+            <button class="tab" data-view="devices">Devices<span class="nav-count" id="nav-devices-count" data-attention></span></button>
+            <button class="tab" data-view="disks">Disks &amp; partitions</button>
+            <button class="tab" data-view="gpu">Graphics card</button>
+            <button class="tab" data-view="monitor">Performance</button>
+            <button class="tab" data-view="battery">Battery</button>
+            <button class="tab" data-view="hwtest">Hardware test</button>
+            <button class="tab" data-view="ghosts">Ghost devices<span class="nav-count" id="nav-ghosts-count"></span></button>
+            <button class="tab" data-view="drivers">Driver export</button>
+          </div>
+          <div class="tabs" data-section="network" data-title="Network" hidden>
+            <button class="tab" data-view="network">Network</button>
+            <button class="tab" data-view="wifi">Wi-Fi keys</button>
+            <button class="tab" data-view="connections">Connections<span class="nav-count nav-count-warn" id="nav-connections-count" data-attention></span></button>
+          </div>
+          <div class="tabs" data-section="security" data-title="Security" hidden>
+            <button class="tab" data-view="security">Security<span class="nav-count nav-count-warn" id="nav-security-count" data-attention></span></button>
+            <button class="tab" data-view="autoruns">Autoruns<span class="nav-count nav-count-warn" id="nav-autoruns-count" data-attention></span></button>
+            <button class="tab" data-view="bitlocker">BitLocker</button>
+            <button class="tab" data-view="accounts">Accounts</button>
+            <button class="tab" data-view="keys">Product keys</button>
+          </div>
+          <div class="tabs" data-section="repair" data-title="Repair" hidden>
+            <button class="tab" data-view="report">Health report</button>
+            <button class="tab" data-view="events">Event log</button>
+            <button class="tab" data-view="repair">Repair</button>
+            <button class="tab" data-view="toolbox">Toolbox</button>
+            <button class="tab" data-view="backups">Backups<span class="nav-count" id="nav-backups-count"></span></button>
+          </div>
+          <div class="tabs" data-section="settings" data-title="Settings" hidden>
+            <button class="tab" data-view="settings">Settings</button>
+            <button class="tab" data-view="update">Update<span class="nav-count nav-count-warn" id="nav-update-count" data-attention></span></button>
+          </div>
+        </header>
 
       <main class="content">
         <!-- Overview -->
@@ -625,6 +579,146 @@
           </div>
         </section>
 
+        <!-- Settings -->
+        <section class="view" id="view-settings">
+          <header class="view-head">
+            <div>
+              <h1>Settings</h1>
+              <p class="subtitle" id="settings-subtitle">Changes save as you make them.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="settings-reset">Reset to defaults</button>
+            </div>
+          </header>
+
+          <div class="group-title">Theme</div>
+          <div class="theme-grid">
+            <button class="theme-card" data-theme-choice="system" aria-pressed="false">
+              <span class="theme-preview" data-theme="dark">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Match Windows</span>
+            </button>
+            <button class="theme-card" data-theme-choice="dark" aria-pressed="false">
+              <span class="theme-preview" data-theme="dark">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Dark</span>
+            </button>
+            <button class="theme-card" data-theme-choice="light" aria-pressed="false">
+              <span class="theme-preview" data-theme="light">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Light</span>
+            </button>
+            <button class="theme-card" data-theme-choice="black" aria-pressed="false">
+              <span class="theme-preview" data-theme="black">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Black</span>
+            </button>
+            <button class="theme-card" data-theme-choice="slate" aria-pressed="false">
+              <span class="theme-preview" data-theme="slate">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Slate</span>
+            </button>
+            <button class="theme-card" data-theme-choice="workshop" aria-pressed="false">
+              <span class="theme-preview" data-theme="workshop">
+                <span class="tp-rail"></span>
+                <span class="tp-body"><span class="tp-card"><span class="tp-line"></span></span><span class="tp-accent"></span></span>
+              </span>
+              <span class="theme-name">Workshop</span>
+            </button>
+          </div>
+
+          <div class="group-title">General</div>
+          <div class="list">
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-start">When BOB opens</label>
+                <div class="set-hint">Start on Home, or back on the tool you last used.</div>
+              </div>
+              <select id="set-start" data-pref="startView"><option value="home">Home</option><option value="last">Where I left off</option></select>
+            </div>
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-updates">Check for updates when BOB starts</label>
+                <div class="set-hint">Shows a badge on Settings when a new version is out. Nothing installs without you.</div>
+              </div>
+              <input class="set-check" type="checkbox" id="set-updates" data-pref="autoCheckUpdates" />
+            </div>
+          </div>
+
+          <div class="group-title">Reports</div>
+          <div class="list">
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-name">Your name or business</label>
+                <div class="set-hint">Printed as "Prepared by" on Health reports. Leave blank to leave it off.</div>
+              </div>
+              <input class="set-text-input" type="text" id="set-name" data-pref="reportName" maxlength="80" placeholder="Not set" />
+            </div>
+          </div>
+
+          <div class="group-title">Cleanup</div>
+          <div class="list">
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-keep">Leave temporary files used in the last</label>
+                <div class="set-hint">Protects installers and apps still using their temp files. Longer is more cautious but finds less.</div>
+              </div>
+              <select id="set-keep" data-pref="tempKeepDays" data-number><option value="1">1 day</option><option value="3">3 days</option><option value="7">7 days</option></select>
+            </div>
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-profiles">Clean every user profile when running as admin</label>
+                <div class="set-hint">Turn off to clean only the account BOB is running under. Also applies to the junk clean in Tune-up.</div>
+              </div>
+              <input class="set-check" type="checkbox" id="set-profiles" data-pref="cleanAllProfiles" />
+            </div>
+          </div>
+
+          <div class="group-title">Tune-up</div>
+          <div class="list">
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-pretick">Tick recommended changes after a scan</label>
+                <div class="set-hint">Turn off to start with nothing ticked and choose every change yourself.</div>
+              </div>
+              <input class="set-check" type="checkbox" id="set-pretick" data-pref="pretickRecommended" />
+            </div>
+          </div>
+
+          <div class="group-title">Graphics card</div>
+          <div class="list">
+            <div class="set-row">
+              <div class="set-text">
+                <label class="set-label" for="set-fan">Put a manual fan back on automatic at</label>
+                <div class="set-hint">The safety limit while a fan is held at a fixed speed.</div>
+              </div>
+              <select id="set-fan" data-pref="fanWatchdogTemp" data-number><option value="75">75 °C</option><option value="80">80 °C</option><option value="83">83 °C</option><option value="87">87 °C</option></select>
+            </div>
+            <div class="set-row">
+              <div class="set-text">
+                <div class="set-label">nvflash location</div>
+                <div class="set-hint set-path" id="set-nvflash">Not found</div>
+              </div>
+              <div class="set-actions">
+                <button class="btn btn-ghost btn-small" id="set-nvflash-locate">Locate…</button>
+                <button class="btn btn-ghost btn-small" id="set-nvflash-forget">Forget</button>
+              </div>
+            </div>
+          </div>
+
+          <p class="set-version" id="set-version"></p>
+        </section>
+
         <!-- Update -->
         <section class="view" id="view-update">
           <header class="view-head">
@@ -998,6 +1092,7 @@
           <div id="dupes-groups"></div>
         </section>
       </main>
+      </div>
     </div>
 
     <div class="toast-stack" id="toasts"></div>

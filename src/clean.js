@@ -73,7 +73,7 @@ async function getContext() {
     current: true,
   };
   const profiles = [current];
-  if (admin) {
+  if (admin && prefs().cleanAllProfiles) {
     for (const p of ps.arr(raw.profiles)) {
       if (!p.path || p.path.toLowerCase() === home.toLowerCase() || !(await exists(p.path))) continue;
       profiles.push({
@@ -97,6 +97,25 @@ async function getContext() {
 }
 
 /* Guards -------------------------------------------------------------------- */
+
+// Settings tab choices; plain defaults when run outside Electron (tests).
+function prefs() {
+  try {
+    return require('./settings').prefs();
+  } catch {
+    return { tempKeepDays: 1, cleanAllProfiles: true };
+  }
+}
+
+// keepSetting targets follow "Leave temp files used in the last…".
+function minAgeOf(target) {
+  return target.keepSetting ? prefs().tempKeepDays * 24 : target.minAgeHours || 0;
+}
+
+function safetyOf(target) {
+  const days = prefs().tempKeepDays;
+  return target.safety.replace('{keep}', days === 1 ? 'a day' : `${days} days`);
+}
 
 function norm(p) {
   return path.resolve(p).toLowerCase().replace(/\\+$/, '');
@@ -178,8 +197,8 @@ const TARGETS = [
     label: 'Temporary files',
     description: 'Scratch files left behind by apps and installers.',
     group: 'Windows',
-    safety: 'Safe. Only items nothing has used for a day are removed, so a running installer or app keeps what it is working on.',
-    minAgeHours: 24,
+    safety: 'Safe. Only items nothing has used for {keep} are removed, so a running installer or app keeps what it is working on.',
+    keepSetting: true,
     ageScope: 'item',
     exclude: holdsOwnFiles,
     user: (p) => [
@@ -193,8 +212,8 @@ const TARGETS = [
     description: 'The machine-wide temp folder used by services and installers.',
     group: 'Windows',
     needsAdmin: true,
-    safety: 'Safe. Only items untouched for a day are removed; files in use are skipped.',
-    minAgeHours: 24,
+    safety: 'Safe. Only items untouched for {keep} are removed; files in use are skipped.',
+    keepSetting: true,
     ageScope: 'item',
     machine: () => [{ path: path.join(windir, 'Temp'), mode: 'contents' }],
   },
@@ -415,8 +434,8 @@ const TARGETS = [
     description: 'Driver packages the NVIDIA and AMD installers unpack (C:\\NVIDIA, C:\\AMD) and drivers GeForce Experience downloaded.',
     group: 'Graphics',
     needsAdmin: true,
-    safety: 'Safe once the driver is installed — the installers unpack again if run. Anything used in the last day is kept.',
-    minAgeHours: 24,
+    safety: 'Safe once the driver is installed — the installers unpack again if run. Anything used within {keep} is kept.',
+    keepSetting: true,
     ageScope: 'item',
     machine: () => [
       { path: path.join(systemDrive + '\\', 'NVIDIA'), mode: 'self' },
@@ -607,7 +626,8 @@ async function resolvePaths(target, ctx) {
 // What a cleanup of one resolved location would remove, split into what goes
 // and what the age rule keeps. Returns the items to delete for the clean pass.
 async function plan(target, loc) {
-  const cutoff = target.minAgeHours ? Date.now() - target.minAgeHours * HOUR : null;
+  const minAge = minAgeOf(target);
+  const cutoff = minAge ? Date.now() - minAge * HOUR : null;
   const out = { bytes: 0, files: 0, recentBytes: 0, recentFiles: 0, remove: [] };
 
   const account = (m, p, isFile) => {
@@ -711,7 +731,7 @@ async function scanTarget(target, ctx) {
     label: target.label,
     description: target.description,
     group: target.group,
-    safety: target.safety,
+    safety: safetyOf(target),
     warn: Boolean(target.warn),
     optional: Boolean(target.optional),
     needsAdmin: Boolean(target.needsAdmin),
@@ -720,7 +740,7 @@ async function scanTarget(target, ctx) {
     files: 0,
     recentBytes: 0,
     recentFiles: 0,
-    minAgeHours: target.minAgeHours || 0,
+    minAgeHours: minAgeOf(target),
     running: (target.apps || []).filter((a) => ctx.procs.has(a)),
     locations: [],
     apps: [],

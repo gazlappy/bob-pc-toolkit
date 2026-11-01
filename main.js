@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { app, BrowserWindow, ipcMain, shell, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, nativeTheme } = require('electron');
 
 const ps = require('./src/ps');
 const sys = require('./src/sys');
@@ -39,6 +39,7 @@ const bitlocker = require('./src/bitlocker');
 const update = require('./src/update');
 const gpu = require('./src/gpu');
 const tuneup = require('./src/tuneup');
+const settings = require('./src/settings');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -61,22 +62,53 @@ function revealWindow() {
   win.focus();
 }
 
+// Window frame colours for each theme (the page's own colours are in style.css).
+const THEME_FRAME = {
+  dark: { color: '#0e1116', symbolColor: '#8b95a5' },
+  light: { color: '#f4f6f9', symbolColor: '#4f5b6b' },
+  black: { color: '#000000', symbolColor: '#98a2b1' },
+  slate: { color: '#1f242b', symbolColor: '#a8b2bf' },
+  workshop: { color: '#14110d', symbolColor: '#aea391' },
+};
+
+function resolvedTheme() {
+  const theme = settings.prefs().theme;
+  if (theme === 'system') return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  return theme;
+}
+
+function applyWindowTheme() {
+  if (!win || win.isDestroyed()) return;
+  const name = resolvedTheme();
+  const frame = THEME_FRAME[name];
+  win.setBackgroundColor(frame.color);
+  win.setTitleBarOverlay({ ...frame, height: 44 });
+  win.webContents.send('theme:changed', name);
+}
+
+// "Match Windows" follows the Windows setting while BOB is open.
+nativeTheme.on('updated', () => {
+  if (settings.prefs().theme === 'system') applyWindowTheme();
+});
+
 function createWindow() {
+  const startTheme = resolvedTheme();
   win = new BrowserWindow({
     width: 1180,
     height: 820,
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#0e1116',
+    backgroundColor: THEME_FRAME[startTheme].color,
     icon: (() => {
       const p = path.join(__dirname, 'build', 'icon.ico');
       return fs.existsSync(p) ? p : undefined;
     })(),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0e1116', symbolColor: '#8b95a5', height: 44 },
+    titleBarOverlay: { ...THEME_FRAME[startTheme], height: 44 },
     webPreferences: {
+      additionalArguments: [`--bob-theme=${startTheme}`],
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -198,7 +230,7 @@ handle('ghost:list', () => ghostdevices.list());
 handle('ghost:remove', (ids) => ghostdevices.remove(ids));
 handle('report:gather', () => report.gather());
 handle('report:save', async () => {
-  const html = report.buildHtml(report.latest() || (await report.gather()));
+  const html = report.buildHtml(report.latest() || (await report.gather()), { preparedBy: settings.prefs().reportName });
   const win = BrowserWindow.getAllWindows()[0];
   const stamp = new Date().toISOString().slice(0, 10);
   const result = await dialog.showSaveDialog(win, {
@@ -211,7 +243,7 @@ handle('report:save', async () => {
   return { canceled: false, path: result.filePath };
 });
 handle('report:open', async () => {
-  const html = report.buildHtml(report.latest() || (await report.gather()));
+  const html = report.buildHtml(report.latest() || (await report.gather()), { preparedBy: settings.prefs().reportName });
   const file = path.join(os.tmpdir(), `bob-report-${Date.now()}.html`);
   fs.writeFileSync(file, html, 'utf8');
   await shell.openPath(file);
@@ -310,6 +342,24 @@ handle('sys:openLink', async (url) => {
   if (parsed.protocol !== 'https:' || !LINK_HOSTS.test(parsed.hostname)) throw new Error('BOB only opens links to known driver and support sites.');
   return shell.openExternal(parsed.href);
 });
+function settingsView() {
+  return { prefs: settings.prefs(), theme: resolvedTheme(), systemTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light', nvflash: gpu.findNvflash(), version: update.getConfig().current };
+}
+gpu.setWatchdogTemp(settings.prefs().fanWatchdogTemp);
+handle('settings:get', () => settingsView());
+handle('settings:set', (key, value) => {
+  settings.setPref(key, value);
+  if (key === 'fanWatchdogTemp') gpu.setWatchdogTemp(settings.prefs().fanWatchdogTemp);
+  if (key === 'theme') applyWindowTheme();
+  return settingsView();
+});
+handle('settings:reset', () => {
+  settings.resetPrefs();
+  gpu.setWatchdogTemp(settings.prefs().fanWatchdogTemp);
+  applyWindowTheme();
+  return settingsView();
+});
+handle('gpu:forgetNvflash', () => gpu.forgetNvflash());
 handle('tuneup:scan', () => tuneup.scan(progress('tuneup:progress')));
 handle('tuneup:apply', (ids) => tuneup.apply(Array.isArray(ids) ? ids : [], progress('tuneup:progress')));
 handle('tuneup:undo', (key) => tuneup.undo(key));

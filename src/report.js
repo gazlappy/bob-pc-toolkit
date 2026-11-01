@@ -51,8 +51,9 @@ function row(k, v) {
   return `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`;
 }
 
-function buildHtml(data) {
+function buildHtml(data, options = {}) {
   const d = data || {};
+  const preparedBy = String(options.preparedBy || '').trim();
   const sys = d.sys || {};
   const os = sys.os || {};
   const machine = sys.machine || {};
@@ -175,6 +176,7 @@ function buildHtml(data) {
     <div>
       <h1>PC Health Report</h1>
       <div class="sub">${esc(os.computerName || sys.hostname || 'This PC')} · ${esc(dateStr)}</div>
+      ${preparedBy ? `<div class="sub">Prepared by ${esc(preparedBy)}</div>` : ''}
     </div>
     <span class="badge ${overall.cls}">${esc(overall.label)}</span>
   </header>
