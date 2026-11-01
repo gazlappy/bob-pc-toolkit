@@ -9,6 +9,10 @@
   <body>
     <div class="titlebar">
       <span class="titlebar-name">BOB<span class="titlebar-tag">Best of the best</span></span>
+      <div class="finder" id="finder">
+        <input class="finder-input" id="finder-input" type="search" placeholder="Find a tool…  Ctrl+K" aria-label="Find a tool" autocomplete="off" spellcheck="false" />
+        <div class="finder-results" id="finder-results" role="listbox" hidden></div>
+      </div>
     </div>
 
     <div class="boot" id="boot">
@@ -72,6 +76,7 @@
             <button class="tab" data-view="registry">Registry<span class="nav-count" id="nav-registry-count"></span></button>
             <button class="tab" data-view="startup">Startup<span class="nav-count" id="nav-startup-count"></span></button>
             <button class="tab" data-view="programs">Programs<span class="nav-count" id="nav-programs-count"></span></button>
+            <button class="tab" data-view="apps">App updates<span class="nav-count" id="nav-apps-count"></span></button>
             <button class="tab" data-view="explorer">Explorer tweaks</button>
           </div>
           <div class="tabs" data-section="hardware" data-title="Hardware" hidden>
@@ -82,6 +87,7 @@
             <button class="tab" data-view="monitor">Performance</button>
             <button class="tab" data-view="battery">Battery</button>
             <button class="tab" data-view="hwtest">Hardware test</button>
+            <button class="tab" data-view="stress">Stress test<span class="nav-count" id="nav-stress-count"></span></button>
             <button class="tab" data-view="ghosts">Ghost devices<span class="nav-count" id="nav-ghosts-count"></span></button>
             <button class="tab" data-view="drivers">Driver export</button>
           </div>
@@ -92,6 +98,7 @@
           </div>
           <div class="tabs" data-section="security" data-title="Security" hidden>
             <button class="tab" data-view="security">Security<span class="nav-count nav-count-warn" id="nav-security-count" data-attention></span></button>
+            <button class="tab" data-view="malware">Malware checks<span class="nav-count nav-count-warn" id="nav-malware-count" data-attention></span></button>
             <button class="tab" data-view="autoruns">Autoruns<span class="nav-count nav-count-warn" id="nav-autoruns-count" data-attention></span></button>
             <button class="tab" data-view="bitlocker">BitLocker</button>
             <button class="tab" data-view="accounts">Accounts</button>
@@ -101,6 +108,8 @@
             <button class="tab" data-view="report">Health report</button>
             <button class="tab" data-view="events">Event log</button>
             <button class="tab" data-view="repair">Repair</button>
+            <button class="tab" data-view="kit">Reinstall kit</button>
+            <button class="tab" data-view="install">Install programs<span class="nav-count" id="nav-install-count"></span></button>
             <button class="tab" data-view="toolbox">Toolbox</button>
             <button class="tab" data-view="backups">Backups<span class="nav-count" id="nav-backups-count"></span></button>
           </div>
@@ -723,6 +732,31 @@
             </div>
           </div>
 
+          <div class="group-title">Tech USB mode</div>
+          <div class="list" id="usb-rows">
+            <div class="set-row">
+              <div class="set-text">
+                <div class="set-label">Keep BOB's settings next to BOB.exe</div>
+                <div class="set-hint" id="usb-hint"></div>
+              </div>
+              <button class="btn btn-ghost btn-small" id="usb-toggle"></button>
+            </div>
+            <div class="set-row" id="usb-local-row" hidden>
+              <div class="set-text">
+                <div class="set-label">BOB's old files on this PC</div>
+                <div class="set-hint" id="usb-local-hint"></div>
+              </div>
+              <button class="btn btn-ghost btn-small" id="usb-local-remove">Remove</button>
+            </div>
+            <div class="set-row" id="usb-leftover-row">
+              <div class="set-text">
+                <div class="set-label">Copies left in the temp folder</div>
+                <div class="set-hint" id="usb-leftover-hint"></div>
+              </div>
+              <button class="btn btn-ghost btn-small" id="usb-leftover-remove">Remove</button>
+            </div>
+          </div>
+
           <p class="set-version" id="set-version"></p>
         </section>
 
@@ -745,10 +779,10 @@
           <header class="view-head">
             <div>
               <h1>Toolbox</h1>
-              <p class="subtitle">The Windows consoles and quick fixes a tech reaches for, one click each.</p>
+              <p class="subtitle">Windows' consoles and quick fixes, one click each. Star the ones you use most.</p>
             </div>
             <div class="head-actions">
-              <input class="search" id="toolbox-search" type="search" placeholder="Search…" />
+              <input class="search" id="toolbox-search" type="search" placeholder="Search tools…" aria-label="Search tools" />
             </div>
           </header>
           <div id="toolbox-body">
@@ -897,6 +931,197 @@
         </section>
 
         <!-- Security posture -->
+        <section class="view" id="view-stress">
+          <header class="view-head">
+            <div>
+              <h1>Stress test</h1>
+              <p class="subtitle">Finds faults that only show under load. BOB stops by itself if the graphics card reaches 90 °C.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="stress-copy" hidden>Copy results</button>
+              <button class="btn btn-danger" id="stress-stop" hidden>Stop</button>
+              <button class="btn btn-primary" id="stress-start">Start test</button>
+            </div>
+          </header>
+
+          <div id="stress-report"></div>
+
+          <div id="stress-setup">
+            <div class="group-title">What to test</div>
+            <div class="list">
+              <label class="clean-row"><input type="checkbox" id="stress-cpu" checked /><span class="clean-body"><span class="clean-name">Processor</span><span class="clean-desc">Every thread works sums with known answers. A wrong answer is a hardware fault.</span></span></label>
+              <label class="clean-row"><input type="checkbox" id="stress-memory" checked /><span class="clean-body"><span class="clean-name">Memory</span><span class="clean-desc">Fills most of the free memory with patterns and reads them back.</span></span></label>
+              <label class="clean-row"><input type="checkbox" id="stress-gpu" checked /><span class="clean-body"><span class="clean-name">Graphics card</span><span class="clean-desc">Draws a heavy scene, watching for driver crashes, heat and wrong pictures.</span></span></label>
+              <label class="clean-row"><input type="checkbox" id="stress-disk" checked /><span class="clean-body"><span class="clean-name">Disk</span><span class="clean-desc">Writes and reads back a 1 GB test file, checks every byte and measures the speed. Runs first, on its own. The file is removed afterwards.</span></span><select id="stress-drive" aria-label="Drive to test"></select></label>
+            </div>
+            <div class="set-row stress-time">
+              <div class="set-text">
+                <label class="set-label" for="stress-minutes">How long</label>
+                <div class="set-hint">5 minutes catches most faults. Overnight-type faults need the longer runs. Plug laptops in first.</div>
+              </div>
+              <select id="stress-minutes"><option value="1">1 minute</option><option value="5" selected>5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select>
+            </div>
+          </div>
+
+          <div id="stress-live" hidden>
+            <div class="stress-status" id="stress-status"></div>
+            <div class="stress-tiles" id="stress-tiles"></div>
+            <div class="stress-screen" id="stress-screen" hidden>
+              <canvas id="stress-canvas" width="640" height="360"></canvas>
+              <div class="set-hint">Sparkles, blocks or streaks in this picture point to graphics memory trouble.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-kit">
+          <header class="view-head">
+            <div>
+              <h1>Reinstall kit</h1>
+              <p class="subtitle">Everything a wipe would lose, copied to another drive and checked against the originals.</p>
+            </div>
+          </header>
+
+          <div id="kit-report"></div>
+
+          <div class="group-title">Save to</div>
+          <div class="kit-dest">
+            <button class="btn btn-ghost" id="kit-choose">Choose a drive…</button>
+            <div class="kit-dest-text" id="kit-dest-text">Use a USB drive or a second disk. A reinstall wipes the drive Windows is on.</div>
+          </div>
+
+          <div class="group-title">Files</div>
+          <div id="kit-files"><div class="empty">Finding folders…</div></div>
+
+          <div class="group-title">Also save</div>
+          <div class="list" id="kit-steps"></div>
+          <p class="group-blurb kit-note">Not included: saved browser passwords, program settings in AppData, and anything kept outside the folders above. Keys are saved as plain text, so delete them from the drive when the job is done.</p>
+
+          <div class="progress" id="kit-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="kit-progress-fill"></div></div>
+            <div class="progress-label" id="kit-progress-label"></div>
+          </div>
+
+          <div class="selection-bar">
+            <span id="kit-total"></span>
+            <div class="row-actions">
+              <button class="btn btn-ghost btn-small" id="kit-stop" hidden>Stop</button>
+              <button class="btn btn-primary btn-small" id="kit-build" disabled>Make the kit</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-install">
+          <header class="view-head">
+            <div>
+              <h1>Install programs</h1>
+              <p class="subtitle">Tick what you want and press one button. Installs what's missing and updates what's old, with no prompts. Each program's own licence is accepted for you.</p>
+            </div>
+            <div class="head-actions">
+              <input class="search" id="install-search" type="search" placeholder="Search BOB's list…" aria-label="Search programs" />
+              <button class="btn btn-ghost" id="install-refresh">Check again</button>
+            </div>
+          </header>
+
+          <div class="browse-modes" id="install-modes" role="group" aria-label="Which programs to show">
+            <button class="browse-chip" id="install-mode-list" aria-pressed="true">BOB's list</button>
+            <button class="browse-chip" id="install-mode-browse" aria-pressed="false">Search and browse everything</button>
+          </div>
+
+          <div class="progress" id="install-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="install-progress-fill"></div></div>
+            <div class="progress-label" id="install-progress-label"></div>
+          </div>
+          <div id="install-report"></div>
+          <div id="install-browse" hidden>
+            <p class="group-blurb">Everything in winget's community catalogue. BOB hasn't checked these programs, so look at the details of anything you don't recognise. Ticks here are for this session only.</p>
+            <div class="browse-tags" id="browse-tags" role="group" aria-label="Categories"></div>
+            <div id="browse-results"></div>
+            <div class="browse-pager" id="browse-pager" hidden>
+              <button class="btn btn-ghost btn-small" id="browse-prev">Previous</button>
+              <span id="browse-page-label"></span>
+              <button class="btn btn-ghost btn-small" id="browse-next">Next</button>
+            </div>
+          </div>
+          <div id="install-body"><div class="empty">Checking what's on this PC…</div></div>
+
+          <div class="selection-bar install-bar" id="install-bar" hidden>
+            <span id="install-count"></span>
+            <div class="row-actions">
+              <button class="btn btn-ghost btn-small" id="install-essentials">Just the essentials</button>
+              <button class="btn btn-ghost btn-small" id="install-clear">Clear ticks</button>
+              <button class="btn btn-ghost btn-small" id="install-stop" hidden>Stop after this one</button>
+              <button class="btn btn-ghost btn-small" id="install-back" hidden>Back to the list</button>
+              <button class="btn btn-primary btn-small" id="install-go">Install</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-apps">
+          <header class="view-head">
+            <div>
+              <h1>App updates</h1>
+              <p class="subtitle">Update what's installed using winget, Windows' own package manager.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="apps-refresh">Check again</button>
+            </div>
+          </header>
+
+          <div class="progress" id="apps-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="apps-progress-fill"></div></div>
+            <div class="progress-label" id="apps-progress-label"></div>
+          </div>
+          <div id="apps-report"></div>
+
+          <div class="group-title">Updates available</div>
+          <div class="selection-bar" id="apps-updates-bar" hidden>
+            <span id="apps-updates-count"></span>
+            <div class="row-actions">
+              <button class="btn btn-ghost btn-small" id="apps-tick-all">Tick all</button>
+              <button class="btn btn-primary btn-small" id="apps-update">Update ticked</button>
+            </div>
+          </div>
+          <div id="apps-updates"><div class="empty">Checking for updates…</div></div>
+
+          <div class="apps-stop" id="apps-stop-wrap" hidden>
+            <button class="btn btn-ghost" id="apps-stop">Stop after this one</button>
+          </div>
+        </section>
+
+        <section class="view" id="view-malware">
+          <header class="view-head">
+            <div>
+              <h1>Malware checks</h1>
+              <p class="subtitle" id="malware-subtitle">The settings malware likes to change, plus a Defender scan. A check, not an antivirus.</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn btn-ghost" id="malware-refresh">Check again</button>
+            </div>
+          </header>
+
+          <div id="malware-summary"></div>
+
+          <div class="group-title">Defender scan</div>
+          <div class="mw-scan">
+            <div class="mw-scan-actions">
+              <button class="btn btn-primary" id="malware-quick">Quick scan</button>
+              <button class="btn btn-ghost" id="malware-full">Full scan</button>
+              <button class="btn btn-ghost" id="malware-update">Update definitions</button>
+              <button class="btn btn-ghost" id="malware-stop" hidden>Stop</button>
+              <button class="btn btn-ghost" id="malware-open">Open Windows Security</button>
+            </div>
+            <div class="progress" id="malware-progress" hidden>
+              <div class="progress-bar"><div class="progress-fill is-indeterminate"></div></div>
+              <div class="progress-label" id="malware-progress-label"></div>
+            </div>
+            <div id="malware-result"></div>
+          </div>
+
+          <div id="malware-body">
+            <div class="empty">Checking…</div>
+          </div>
+        </section>
+
         <section class="view" id="view-security">
           <header class="view-head">
             <div>

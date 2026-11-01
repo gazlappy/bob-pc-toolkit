@@ -29,6 +29,15 @@ const state = {
   drivers: { data: null, loaded: false, search: '', exporting: false },
   accounts: { data: null, loaded: false },
   toolbox: { data: null, loaded: false, search: '', running: null },
+  malware: { data: null, loaded: false },
+  usb: null,
+  stress: { loaded: false, options: {}, stopped: false, report: null },
+  kit: { plan: null, dest: null, sizes: {}, selected: new Set(), steps: new Set(), busy: false, loaded: false },
+  apps: { upgrades: null, selected: new Set(), busy: false, loaded: false },
+  install: {
+    data: null, picks: new Set(), extras: new Map(), search: '', mode: 'list', busy: false, queue: [], loaded: false,
+    browse: { query: '', tag: '', page: 0, data: null, ticket: 0, timer: null },
+  },
   disks: { data: null, loaded: false },
   wifi: { data: null, loaded: false, search: '', revealed: new Set() },
   ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
@@ -183,6 +192,11 @@ function show(view) {
   if (view === 'events' && !state.events.loaded) loadEvents();
   if (view === 'autoruns' && !state.autoruns.loaded) loadAutoruns();
   if (view === 'security' && !state.security.loaded) loadSecurity();
+  if (view === 'malware' && !state.malware.loaded) loadMalware();
+  if (view === 'apps' && !state.apps.loaded) loadApps();
+  if (view === 'install' && !state.install.loaded) loadInstall();
+  if (view === 'kit' && !state.kit.loaded) loadKit();
+  if (view === 'stress' && !state.stress.loaded) loadStress();
   if (view === 'battery' && !state.battery.loaded) loadBattery();
   if (view === 'connections' && !state.connections.loaded) loadConnections();
   if (view === 'drivers' && !state.drivers.loaded) loadDrivers();
@@ -195,7 +209,10 @@ function show(view) {
   if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
   if (view === 'tuneup' && !state.tuneup.loaded) loadTuneup();
-  if (view === 'settings') loadSettings();
+  if (view === 'settings') {
+    loadSettings();
+    loadUsb();
+  }
   if (view === 'update' && !state.update.loaded) loadUpdate();
   if (view === 'hwtest') initHwtest();
   else stopHwtest();
@@ -4088,16 +4105,60 @@ async function runTool(tool, tile) {
   }
 }
 
-function toolTile(tool) {
-  const tile = document.createElement('button');
-  tile.className = `tool-tile${tool.kind === 'action' ? ' is-action' : ''}`;
-  const label = document.createElement('div');
-  label.className = 'tool-label';
+function toolboxPins() {
+  return (state.prefs && state.prefs.toolboxPins) || [];
+}
+
+async function toggleToolPin(tool) {
+  const pins = toolboxPins();
+  const next = pins.includes(tool.id) ? pins.filter((id) => id !== tool.id) : [...pins, tool.id];
+  try {
+    const view = await window.pc.settings.set('toolboxPins', next);
+    state.prefs = view.prefs;
+    renderToolbox();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function toolRow(tool, showDesc) {
+  const row = document.createElement('div');
+  row.className = `tb-row${tool.danger ? ' is-danger' : ''}`;
+  row.dataset.tool = tool.id;
+
+  const run = document.createElement('button');
+  run.className = 'tb-run';
+  run.title = tool.desc;
+  const label = document.createElement('span');
+  label.className = 'tb-label';
   label.textContent = tool.label;
-  const desc = document.createElement('div');
-  desc.className = 'tool-desc';
-  desc.textContent = tool.desc;
-  tile.append(label, desc);
+  run.append(label);
+  if (showDesc && tool.desc) {
+    const desc = document.createElement('span');
+    desc.className = 'tb-desc';
+    desc.textContent = tool.desc;
+    run.append(desc);
+  }
+  run.addEventListener('click', () => runTool(tool, row));
+
+  const pinned = toolboxPins().includes(tool.id);
+  const star = document.createElement('button');
+  star.className = 'tb-star';
+  star.textContent = pinned ? '★' : '☆';
+  star.setAttribute('aria-pressed', String(pinned));
+  star.setAttribute('aria-label', `${pinned ? 'Unpin' : 'Pin'} ${tool.label}`);
+  star.title = pinned ? 'Unpin' : 'Pin to the top';
+  star.addEventListener('click', () => toggleToolPin(tool));
+
+  row.append(run, star);
+  return row;
+}
+
+function pinnedTile(tool) {
+  const tile = document.createElement('button');
+  tile.className = `tb-pin${tool.danger ? ' is-danger' : ''}`;
+  tile.textContent = tool.label;
+  tile.title = tool.desc;
   tile.addEventListener('click', () => runTool(tool, tile));
   return tile;
 }
@@ -4110,24 +4171,37 @@ function renderToolbox() {
     return;
   }
   const term = state.toolbox.search.trim().toLowerCase();
-  const tools = data.tools.filter((t) => !term || `${t.label} ${t.desc}`.toLowerCase().includes(term));
+  const tools = data.tools.filter((t) => !term || `${t.label} ${t.desc} ${t.group}`.toLowerCase().includes(term));
 
   body.replaceChildren();
-  const groups = [...new Set(tools.map((t) => t.group))];
-  if (!groups.length) {
+  if (!tools.length) {
     body.replaceChildren(empty('Nothing matches.'));
     return;
   }
-  for (const group of groups) {
-    const title = document.createElement('div');
-    title.className = 'group-title';
-    title.textContent = group;
-    body.append(title);
-    const grid = document.createElement('div');
-    grid.className = 'tool-grid';
-    for (const t of tools.filter((x) => x.group === group)) grid.append(toolTile(t));
-    body.append(grid);
+
+  // Pinned tools stay in their group too, so the groups never shift about.
+  if (!term) {
+    const pinned = toolboxPins().map((id) => data.tools.find((t) => t.id === id)).filter(Boolean);
+    const box = document.createElement('div');
+    box.className = 'tb-pins';
+    if (pinned.length) for (const t of pinned) box.append(pinnedTile(t));
+    else box.textContent = 'Click the star beside any tool to pin it here.';
+    body.append(box);
   }
+
+  const columns = document.createElement('div');
+  columns.className = 'tb-columns';
+  for (const group of [...new Set(tools.map((t) => t.group))]) {
+    const card = document.createElement('div');
+    card.className = 'tb-card';
+    const title = document.createElement('div');
+    title.className = 'tb-card-title';
+    title.textContent = group;
+    card.append(title);
+    for (const t of tools.filter((x) => x.group === group)) card.append(toolRow(t, Boolean(term)));
+    columns.append(card);
+  }
+  body.append(columns);
 }
 
 async function loadToolbox() {
@@ -7236,6 +7310,1500 @@ async function applyStartupSettings() {
     /* run on defaults */
   }
 }
+
+/* Tech USB mode ------------------------------------------------------------ */
+
+async function loadUsb() {
+  let s;
+  try {
+    s = await window.pc.usb.status();
+  } catch (error) {
+    $('usb-hint').textContent = error.message;
+    return;
+  }
+  state.usb = s;
+  const toggle = $('usb-toggle');
+  toggle.hidden = !s.available;
+  toggle.disabled = false;
+  toggle.textContent = s.active ? 'Turn off' : 'Turn on';
+  if (!s.available) {
+    $('usb-hint').textContent = 'Only works when running BOB.exe itself, for example from a USB stick.';
+  } else if (s.active) {
+    $('usb-hint').textContent = `On. Settings live in ${s.location}\\BOB-data. Each PC gets its own restore points and undo list there, and BOB tidies its temp files when it closes.`;
+  } else {
+    $('usb-hint').textContent = `Off. BOB leaves its settings on every PC it runs on. Turn on to keep them in ${s.location}\\BOB-data. Takes effect the next time BOB opens.`;
+  }
+
+  $('usb-local-row').hidden = !(s.active && s.local.folders.length);
+  $('usb-local-hint').textContent = `${formatBytes(s.local.bytes)} from before USB mode, including this PC's old restore points and Tune-up undo list. They can't be got back once removed.`;
+
+  $('usb-leftover-remove').hidden = !s.leftovers.count;
+  $('usb-leftover-hint').textContent = s.leftovers.count
+    ? `${s.leftovers.count} unpacked ${s.leftovers.count === 1 ? 'copy' : 'copies'} of BOB, ${formatBytes(s.leftovers.bytes)}, left by force-closing it. Safe to remove.`
+    : 'None. BOB unpacks itself here each time it opens and tidies up on a clean exit.';
+}
+
+$('usb-toggle').addEventListener('click', async () => {
+  const s = state.usb;
+  try {
+    if (s.active) {
+      await window.pc.usb.disable();
+      toast('USB mode is off from the next time BOB opens.');
+    } else {
+      await window.pc.usb.enable();
+      toast('USB mode is on from the next time BOB opens.');
+    }
+    $('usb-toggle').disabled = true;
+    $('usb-toggle').textContent = 'Reopen BOB to finish';
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+$('usb-leftover-remove').addEventListener('click', async () => {
+  try {
+    const { removed, bytes } = await window.pc.usb.removeLeftovers();
+    toast(`Removed ${removed} ${removed === 1 ? 'copy' : 'copies'}, ${formatBytes(bytes)}.`);
+    loadUsb();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+$('usb-local-remove').addEventListener('click', async () => {
+  const go = await confirmAction({
+    title: "Remove BOB's old files from this PC?",
+    body: "This deletes the settings, restore points and Tune-up undo list BOB saved on this PC before USB mode. Anything BOB changed here can no longer be undone from those. Programs BOB quarantined are kept.",
+    confirmLabel: 'Remove',
+  });
+  if (!go) return;
+  try {
+    const { bytes } = await window.pc.usb.removeLocal();
+    toast(`Removed ${formatBytes(bytes)}.`);
+    loadUsb();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+/* Stress test -------------------------------------------------------------- */
+
+const STRESS_VERTEX = `attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
+const STRESS_FRAGMENT = `
+precision highp float;
+uniform vec2 size;
+uniform float t;
+float scene(vec3 p) {
+  vec3 z = p;
+  float dr = 1.0, r = 0.0;
+  float power = 6.0 + 2.0 * sin(t * 0.2);
+  for (int i = 0; i < 10; i++) {
+    r = length(z);
+    if (r > 2.0) break;
+    float theta = acos(z.z / r) * power;
+    float phi = atan(z.y, z.x) * power + t * 0.1;
+    dr = pow(r, power - 1.0) * power * dr + 1.0;
+    z = pow(r, power) * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta)) + p;
+  }
+  return 0.5 * log(r) * r / dr;
+}
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * size) / size.y;
+  vec3 eye = vec3(0.0, 0.0, -2.6);
+  vec3 dir = normalize(vec3(uv, 1.3));
+  float dist = 0.0;
+  float glow = 0.0;
+  for (int i = 0; i < 90; i++) {
+    float d = scene(eye + dir * dist);
+    if (d < 0.0008 || dist > 6.0) break;
+    dist += d;
+    glow += 1.0;
+  }
+  float g = glow / 90.0;
+  gl_FragColor = vec4(g * 0.25 + 0.05, g * g * 0.9, g * 1.2 + 0.1, 1.0);
+}`;
+
+function createStressGl(canvas) {
+  const gl = canvas.getContext('webgl', { powerPreference: 'high-performance', antialias: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false });
+  if (!gl) return { skipped: 'WebGL is not available, so the graphics card could not be tested. Check the driver is installed.' };
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const rawName = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : '';
+  const renderer = rawName.replace(/^ANGLE \((?:[^,]+, )?([^,]+?)(?: Direct3D.*|,.*)?\)?$/, '$1').trim() || 'Graphics card';
+  if (/swiftshader|llvmpipe|basic render/i.test(rawName)) return { skipped: 'This PC is drawing in software, so there is no graphics card driver to test. Install the proper driver first.' };
+
+  const compile = (type, source) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    return shader;
+  };
+  const program = gl.createProgram();
+  gl.attachShader(program, compile(gl.VERTEX_SHADER, STRESS_VERTEX));
+  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, STRESS_FRAGMENT));
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return { skipped: 'The graphics driver would not run the test scene.' };
+  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.bindAttribLocation(program, 0, 'p');
+  gl.linkProgram(program);
+  gl.useProgram(program);
+  gl.vertexAttribPointer(gl.getAttribLocation(program, 'p'), 2, gl.FLOAT, false, 0, 0);
+  const uSize = gl.getUniformLocation(program, 'size');
+  const uTime = gl.getUniformLocation(program, 't');
+
+  const target = (w, h) => {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    return { fbo, w, h };
+  };
+  const big = target(1920, 1080);
+  const check = target(256, 256);
+  const pixels = new Uint8Array(256 * 256 * 4);
+  const one = new Uint8Array(4);
+
+  const draw = (fbo, w, h, time) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, w, h);
+    gl.uniform2f(uSize, w, h);
+    gl.uniform1f(uTime, time);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+  const hashFixedPicture = () => {
+    draw(check.fbo, check.w, check.h, 12.5);
+    gl.readPixels(0, 0, 256, 256, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let hash = 2166136261;
+    for (let i = 0; i < pixels.length; i += 1) hash = Math.imul(hash ^ pixels[i], 16777619);
+    return hash >>> 0;
+  };
+
+  const out = { renderer, lost: false, seconds: 0, imageChecks: 0, imageErrors: 0, frames: 0 };
+  let running = true;
+  let draws = 1;
+  let time = 0;
+  const started = performance.now();
+  const reference = hashFixedPicture();
+  let lastCheck = started;
+
+  canvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    out.lost = true;
+    out.seconds = Math.round((performance.now() - started) / 1000);
+    running = false;
+  });
+
+  const frame = () => {
+    if (!running) return;
+    const begin = performance.now();
+    for (let i = 0; i < draws; i += 1) {
+      time += 0.02;
+      draw(big.fbo, big.w, big.h, time);
+    }
+    // Forces the card to finish, or the driver just queues work and the timing lies.
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one);
+    const took = performance.now() - begin;
+    // Keeps each batch short: Windows resets a driver stuck on one job for 2 seconds.
+    if (took < 60) draws = Math.min(draws + 1, 64);
+    else if (took > 150) draws = Math.max(1, Math.floor(draws / 2));
+
+    draw(null, canvas.width, canvas.height, time);
+    out.frames += 1;
+
+    const now = performance.now();
+    if (now - lastCheck > 5000) {
+      lastCheck = now;
+      out.imageChecks += 1;
+      if (hashFixedPicture() !== reference) out.imageErrors += 1;
+    }
+    setTimeout(frame, 0);
+  };
+  frame();
+
+  return {
+    out,
+    stop() {
+      running = false;
+      if (!out.lost) out.seconds = Math.round((performance.now() - started) / 1000);
+      return out;
+    },
+  };
+}
+
+function stressTile(label, value, sub, level) {
+  const tile = el('div', `stress-tile${level ? ` is-${level}` : ''}`);
+  tile.append(el('div', 'stress-tile-label', label), el('div', 'stress-tile-value', value));
+  if (sub) tile.append(el('div', 'stress-tile-sub', sub));
+  return tile;
+}
+
+function renderStressLive(s) {
+  const k = state.stress;
+  const tiles = [];
+  if (k.options.cpu) {
+    tiles.push(stressTile('Processor load', s.cpuLoad === null ? '–' : `${Math.round(s.cpuLoad)}%`));
+    tiles.push(stressTile('Processor speed', s.cpuMhz ? `${(s.cpuMhz / 1000).toFixed(2)} GHz` : '–', s.baseMhz ? `Rated ${(s.baseMhz / 1000).toFixed(2)} GHz` : ''));
+    tiles.push(stressTile('Processor errors', String(s.cpuErrors), '', s.cpuErrors ? 'bad' : ''));
+  }
+  if (k.options.memory) {
+    tiles.push(stressTile('Memory in test', formatBytes(s.memoryBytes), `${s.memoryPasses} pass${s.memoryPasses === 1 ? '' : 'es'} done`));
+    tiles.push(stressTile('Memory errors', s.memoryErrors.toLocaleString(), '', s.memoryErrors ? 'bad' : ''));
+  }
+  if (k.options.gpu) {
+    const hot = s.gpuTemp >= 85;
+    tiles.push(stressTile('Graphics temperature', s.gpuTemp === null || s.gpuTemp === undefined ? 'No sensor' : `${s.gpuTemp} °C`, 'Stops at 90 °C', hot ? 'hot' : ''));
+    if (s.gpuLoad !== null && s.gpuLoad !== undefined) tiles.push(stressTile('Graphics load', `${Math.round(s.gpuLoad)}%`, s.gpuPower ? `${Math.round(s.gpuPower)} W` : ''));
+    if (s.gpuFan !== null && s.gpuFan !== undefined) tiles.push(stressTile('Graphics fan', `${Math.round(s.gpuFan)}%`));
+  }
+  tiles.push(stressTile('Motherboard sensor', s.boardTemp === null ? 'None' : `${Math.round(s.boardTemp)} °C`, s.boardTemp === null ? 'Windows cannot see the processor temperature here' : 'Not always the processor itself'));
+  $('stress-tiles').replaceChildren(...tiles);
+  const m = Math.floor(s.left / 60);
+  $('stress-status').textContent = `Under load. ${m}:${String(s.left % 60).padStart(2, '0')} left. Stop it if the PC starts to smell or sound wrong.`;
+}
+
+const STRESS_WORD = { pass: 'Pass', warn: 'Check', fail: 'Fail', skip: 'Skipped' };
+
+function renderStressReport(report) {
+  state.stress.report = report;
+  const lead = report.stoppedBy === 'gpu-heat' || report.stoppedBy === 'board-heat'
+    ? 'Stopped: too hot'
+    : report.overall === 'fail' ? 'Failed'
+      : report.early ? 'Stopped early, no faults so far'
+        : report.overall === 'warn' ? 'Passed, with things to check' : 'Passed';
+  const box = el('div', `ar-summary ${report.overall === 'pass' ? 'is-good' : 'is-warn'}${report.overall === 'fail' ? ' stress-failed' : ''}`);
+  box.append(el('div', 'ar-summary-lead', lead));
+  box.append(el('div', 'ar-summary-sub', report.early
+    ? `You stopped it after ${formatDuration(report.seconds)}, so this counts for less than a full run.`
+    : `${report.seconds ? formatDuration(report.seconds) : 'Disk only'} under test.`));
+  const list = el('div', 'list stress-results');
+  for (const line of report.lines) {
+    const row = el('div', 'clean-row');
+    const text = el('div', 'clean-body');
+    text.append(el('div', 'clean-name', line.name), el('div', 'clean-desc', line.detail));
+    const tagClass = { pass: 'tag-ok', warn: 'tag-warn', fail: 'tag-danger', skip: '' }[line.level];
+    row.append(text, el('span', `tag ${tagClass}`, STRESS_WORD[line.level]));
+    list.append(row);
+  }
+  $('stress-report').replaceChildren(box, list);
+  $('stress-copy').hidden = false;
+}
+
+async function loadStress() {
+  state.stress.loaded = true;
+  const select = $('stress-drive');
+  try {
+    const drives = await window.pc.stress.drives();
+    select.replaceChildren(...drives.map((d) => {
+      const option = document.createElement('option');
+      option.value = d.letter;
+      option.textContent = `${d.letter}: ${d.label || d.model || ''} ${d.media && d.media !== 'Unspecified' ? `(${d.media})` : ''}`.trim();
+      option.disabled = !d.enoughSpace;
+      return option;
+    }));
+    const first = drives.find((d) => d.enoughSpace);
+    if (first) select.value = first.letter;
+    else $('stress-disk').checked = false;
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function startStress() {
+  const k = state.stress;
+  const options = {
+    cpu: $('stress-cpu').checked,
+    memory: $('stress-memory').checked,
+    gpu: $('stress-gpu').checked,
+    minutes: Number($('stress-minutes').value),
+  };
+  const letter = $('stress-disk').checked ? $('stress-drive').value : null;
+  if (!options.cpu && !options.memory && !options.gpu && !letter) {
+    toast('Tick at least one thing to test.', 'error');
+    return;
+  }
+  const go = await confirmAction({
+    title: 'Start the stress test?',
+    body: 'The PC will run flat out, hot and loud, and may be slow to respond. Save any open work first. If a part is faulty the PC could crash or restart, which is itself a result.',
+    confirmLabel: 'Start test',
+    danger: false,
+  });
+  if (!go) return;
+
+  k.options = options;
+  k.stopped = false;
+  $('stress-start').hidden = true;
+  $('stress-copy').hidden = true;
+  $('stress-stop').hidden = false;
+  $('stress-stop').disabled = false;
+  $('stress-setup').hidden = true;
+  $('stress-report').replaceChildren();
+  $('stress-live').hidden = false;
+  $('stress-tiles').replaceChildren();
+  $('stress-screen').hidden = true;
+  $('nav-stress-count').textContent = 'Running';
+
+  let diskResult = null;
+  let diskError = null;
+  if (letter) {
+    $('stress-status').textContent = `Testing disk ${letter}: on its own, so the speed is a fair one…`;
+    try {
+      diskResult = await window.pc.stress.disk(letter);
+    } catch (error) {
+      if (!k.stopped) diskError = { letter, message: error.message };
+    }
+  }
+
+  let raw = null;
+  let gl = null;
+  if (!k.stopped && (options.cpu || options.memory || options.gpu)) {
+    let session = null;
+    if (options.gpu) {
+      $('stress-screen').hidden = false;
+      session = createStressGl($('stress-canvas'));
+      if (session.skipped) {
+        gl = { skipped: session.skipped };
+        session = null;
+        $('stress-screen').hidden = true;
+      }
+    }
+    $('stress-status').textContent = 'Starting the load…';
+    try {
+      raw = await window.pc.stress.load(options);
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+    if (session) gl = session.stop();
+  }
+
+  try {
+    renderStressReport(await window.pc.stress.verdict({ raw, diskResult, diskError, gl }));
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+  $('nav-stress-count').textContent = '';
+  $('stress-live').hidden = true;
+  $('stress-setup').hidden = false;
+  $('stress-start').hidden = false;
+  $('stress-stop').hidden = true;
+  // A used WebGL context can't be reused safely; a fresh canvas means a fresh start.
+  const fresh = document.createElement('canvas');
+  fresh.id = 'stress-canvas';
+  fresh.width = 640;
+  fresh.height = 360;
+  $('stress-canvas').replaceWith(fresh);
+  document.querySelector('.content').scrollTop = 0;
+}
+
+$('stress-start').addEventListener('click', startStress);
+$('stress-stop').addEventListener('click', () => {
+  state.stress.stopped = true;
+  $('stress-stop').disabled = true;
+  window.pc.stress.stop().catch(() => {});
+});
+$('stress-copy').addEventListener('click', () => {
+  const r = state.stress.report;
+  if (!r) return;
+  const text = [`BOB stress test: ${r.overall.toUpperCase()}`, ...r.lines.map((l) => `${STRESS_WORD[l.level]}  ${l.name}: ${l.detail}`)].join('\n');
+  window.pc.copyText(text).then(() => toast('Results copied.')).catch((e) => toast(e.message, 'error'));
+});
+window.pc.stress.onProgress(renderStressLive);
+window.pc.stress.onDisk(({ letter, phase, done, rate }) => {
+  const word = { write: `writing ${Math.round(rate)} MB/s`, read: `reading and checking ${Math.round(rate)} MB/s`, random: `small reads, ${Math.round(rate).toLocaleString()} a second` }[phase] || phase;
+  $('stress-status').textContent = `Disk ${letter}: ${word}, ${Math.round(done * 100)}%`;
+});
+
+/* Reinstall kit ------------------------------------------------------------ */
+
+const KIT_STEPS = [
+  { id: 'bookmarks', name: 'Browser bookmarks', desc: 'Chrome, Edge, Brave and Firefox, for every user. Close the browsers first.' },
+  { id: 'keys', name: 'Product keys', desc: 'Windows and Office, as far as they can be read.' },
+  { id: 'wifi', name: 'Wi-Fi keys', desc: 'Every saved network and its password.' },
+  { id: 'programs', name: 'List of installed programs', desc: 'So you know what to put back. Includes a winget list for reinstalling in one go.' },
+  { id: 'drivers', name: 'Drivers', desc: 'Every third-party driver. Can take several minutes.' },
+];
+
+async function loadKit() {
+  const k = state.kit;
+  k.loaded = true;
+  k.steps = new Set(KIT_STEPS.map((s) => s.id));
+  try {
+    k.plan = await window.pc.kit.plan();
+  } catch (error) {
+    $('kit-files').replaceChildren(empty(error.message));
+    return;
+  }
+  k.selected = new Set(k.plan.folders.map((f) => f.id));
+  renderKit();
+  renderKitSteps();
+  for (const folder of k.plan.folders) {
+    try {
+      k.sizes[folder.id] = await window.pc.kit.measure(folder.id);
+    } catch {
+      k.sizes[folder.id] = { bytes: 0, count: 0 };
+    }
+    renderKit();
+  }
+}
+
+function renderKit() {
+  const k = state.kit;
+  const body = $('kit-files');
+  body.replaceChildren();
+  for (const user of k.plan.users) {
+    const folders = k.plan.folders.filter((f) => f.user === user.name);
+    if (!folders.length) continue;
+    const measuring = folders.filter((f) => !k.sizes[f.id]).length;
+    const shown = folders.filter((f) => !k.sizes[f.id] || k.sizes[f.id].count > 0);
+    body.append(el('div', 'kit-user', user.current ? `${user.name} (signed in now)` : user.name));
+    if (!shown.length && !measuring) {
+      body.append(el('div', 'kit-empty-user', 'Nothing in these folders.'));
+      continue;
+    }
+    const list = el('div', 'list kit-folders');
+    for (const folder of shown) {
+      const size = k.sizes[folder.id];
+      const row = el('label', 'clean-row');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = k.selected.has(folder.id);
+      box.disabled = k.busy;
+      box.addEventListener('change', () => {
+        if (box.checked) k.selected.add(folder.id);
+        else k.selected.delete(folder.id);
+        kitBar();
+      });
+      const text = el('div', 'clean-body');
+      text.append(el('div', 'clean-name', folder.name));
+      text.append(el('div', 'clean-desc', folder.cloud ? `${folder.source}. In OneDrive, so files only in the cloud get downloaded.` : folder.source));
+      row.append(box, text, el('span', 'clean-meta', size ? `${formatBytes(size.bytes)}, ${size.count.toLocaleString()} file${size.count === 1 ? '' : 's'}` : 'Measuring…'));
+      list.append(row);
+    }
+    body.append(list);
+  }
+  kitBar();
+}
+
+function renderKitSteps() {
+  const k = state.kit;
+  const list = $('kit-steps');
+  list.replaceChildren();
+  for (const step of KIT_STEPS) {
+    const row = el('label', 'clean-row');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = k.steps.has(step.id);
+    box.disabled = k.busy;
+    box.addEventListener('change', () => {
+      if (box.checked) k.steps.add(step.id);
+      else k.steps.delete(step.id);
+      kitBar();
+    });
+    const text = el('div', 'clean-body');
+    text.append(el('div', 'clean-name', step.name), el('div', 'clean-desc', step.desc));
+    row.append(box, text);
+    list.append(row);
+  }
+}
+
+function kitTotal() {
+  const k = state.kit;
+  let bytes = 0;
+  for (const id of k.selected) if (k.sizes[id]) bytes += k.sizes[id].bytes;
+  return bytes;
+}
+
+function kitBar() {
+  const k = state.kit;
+  if (!k.plan) return;
+  const bytes = kitTotal();
+  const dest = k.dest;
+  const usable = dest && !dest.onWindowsDrive;
+  const tooBig = usable && dest.free !== null && bytes > dest.free;
+  const measuring = k.plan.folders.some((f) => k.selected.has(f.id) && !k.sizes[f.id]);
+  let message = `${formatBytes(bytes)} of files ticked`;
+  if (measuring) message += ', still measuring';
+  if (usable && dest.free !== null) message += `, ${formatBytes(dest.free)} free on ${dest.drive}`;
+  if (tooBig) message = `${formatBytes(bytes)} of files will not fit in the ${formatBytes(dest.free)} free on ${dest.drive}`;
+  if (!usable) message += '. Choose a drive to carry on.';
+  $('kit-total').textContent = message;
+  $('kit-build').disabled = k.busy || !usable || tooBig || measuring || (!k.selected.size && !k.steps.size);
+  $('kit-choose').disabled = k.busy;
+}
+
+function renderKitDest() {
+  const dest = state.kit.dest;
+  const text = $('kit-dest-text');
+  text.classList.toggle('is-danger', Boolean(dest && dest.onWindowsDrive));
+  if (!dest) return;
+  if (dest.onWindowsDrive) {
+    text.textContent = `${dest.drive} is the drive Windows is on, so a reinstall would wipe the kit too. Choose another drive.`;
+    return;
+  }
+  const notes = [dest.destination];
+  if (dest.fat32) notes.push('This drive is FAT32, so any file over 4 GB will fail to copy. Format it as exFAT to avoid that.');
+  text.textContent = notes.join(' ');
+}
+
+function renderKitReport(report) {
+  const box = el('div', `ar-summary ${report.ok ? 'is-good' : 'is-warn'}`);
+  box.append(el('div', 'ar-summary-lead', report.stopped
+    ? 'Stopped. This kit is not complete'
+    : report.ok ? 'Done. Everything copied and checked against the originals' : 'Finished, but not everything was saved. Check this before wiping'));
+  for (const r of report.results.filter((x) => !x.ok)) {
+    const count = r.missing && r.missing.length ? r.missing.length : (r.failed ? r.failed.length : 0);
+    box.append(el('div', 'ar-summary-sub', r.kind === 'folder' ? `${r.label}: ${count} file${count === 1 ? '' : 's'} not copied. The list is in READ ME.txt.` : `${r.label}: ${r.note}`));
+  }
+  for (const r of report.results.filter((x) => x.ok && x.kind === 'step')) box.append(el('div', 'ar-summary-sub', `${r.label}: ${r.note}`));
+  const open = el('button', 'btn btn-ghost btn-small kit-open', 'Open the kit folder');
+  open.addEventListener('click', () => window.pc.kit.reveal().catch((e) => toast(e.message, 'error')));
+  box.append(open);
+  $('kit-report').replaceChildren(box);
+  document.querySelector('.content').scrollTop = 0;
+}
+
+$('kit-choose').addEventListener('click', async () => {
+  try {
+    const dest = await window.pc.kit.choose();
+    if (!dest) return;
+    state.kit.dest = dest;
+    renderKitDest();
+    kitBar();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+});
+
+$('kit-build').addEventListener('click', async () => {
+  const k = state.kit;
+  k.busy = true;
+  renderKit();
+  renderKitSteps();
+  $('kit-report').replaceChildren();
+  $('kit-progress').hidden = false;
+  $('kit-progress-fill').style.width = '0%';
+  $('kit-progress-label').textContent = 'Starting…';
+  $('kit-stop').hidden = false;
+  $('kit-stop').disabled = false;
+  try {
+    renderKitReport(await window.pc.kit.build({ folders: [...k.selected], steps: [...k.steps], bytes: kitTotal() }));
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+  k.busy = false;
+  $('kit-progress').hidden = true;
+  $('kit-stop').hidden = true;
+  renderKit();
+  renderKitSteps();
+});
+
+$('kit-stop').addEventListener('click', () => {
+  $('kit-stop').disabled = true;
+  window.pc.kit.stop().catch(() => {});
+});
+
+window.pc.kit.onProgress(({ label, file, doneBytes, totalBytes }) => {
+  if (totalBytes) $('kit-progress-fill').style.width = `${Math.min(100, Math.round((doneBytes / totalBytes) * 100))}%`;
+  $('kit-progress-label').textContent = `${label}${totalBytes ? `, ${formatBytes(doneBytes)} of ${formatBytes(totalBytes)}` : ''}${file ? `: ${file}` : ''}`.slice(0, 170);
+});
+
+/* Apps --------------------------------------------------------------------- */
+
+function appsUnavailable() {
+  const box = el('div', 'empty');
+  box.append(el('div', '', 'winget is not ready on this PC, so BOB cannot update or install programs here.'));
+  box.append(el('div', 'apps-hint', 'New copies of Windows often have it but have not switched it on yet. Try setting it up, and if that does not work, update "App Installer" from the Microsoft Store.'));
+  const setup = el('button', 'btn btn-primary btn-small', 'Set up winget');
+  setup.addEventListener('click', async () => {
+    setup.disabled = true;
+    setup.textContent = 'Setting up…';
+    try {
+      const { available } = await window.pc.apps.repair();
+      if (!available) throw new Error('That did not work. Update App Installer from the Microsoft Store.');
+      toast('winget is ready.');
+      state.apps.loaded = false;
+      state.install.loaded = false;
+      if (state.currentView === 'apps') loadApps();
+      if (state.currentView === 'install') loadInstall();
+    } catch (error) {
+      toast(error.message, 'error');
+      setup.disabled = false;
+      setup.textContent = 'Set up winget';
+    }
+  });
+  const link = el('button', 'tune-link', 'How to get winget');
+  link.addEventListener('click', () => window.pc.openLink('https://learn.microsoft.com/windows/package-manager/winget/').catch((e) => toast(e.message, 'error')));
+  box.append(setup, link);
+  return box;
+}
+
+async function loadApps() {
+  const a = state.apps;
+  a.loaded = true;
+  $('apps-refresh').disabled = true;
+  $('apps-updates-bar').hidden = true;
+  $('apps-updates').replaceChildren(empty('Checking for updates…'));
+  try {
+    a.upgrades = await window.pc.apps.upgrades();
+    a.selected = new Set();
+    renderAppUpdates();
+  } catch (error) {
+    $('apps-updates').replaceChildren(empty(error.message));
+  }
+  $('apps-refresh').disabled = false;
+}
+
+function appCheckRow(title, desc, checked, disabled, onChange, tag) {
+  const row = el('label', `clean-row${disabled ? ' is-empty' : ''}`);
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = checked;
+  box.disabled = disabled;
+  box.addEventListener('change', () => onChange(box.checked));
+  const text = el('div', 'clean-body');
+  text.append(el('div', 'clean-name', title));
+  if (desc) text.append(el('div', 'clean-desc', desc));
+  row.append(box, text);
+  if (tag) row.append(el('span', 'tag', tag));
+  return row;
+}
+
+function renderAppUpdates() {
+  const a = state.apps;
+  const data = a.upgrades;
+  const body = $('apps-updates');
+  if (!data) return;
+  if (!data.available) {
+    body.replaceChildren(appsUnavailable());
+    $('nav-apps-count').textContent = '';
+    return;
+  }
+  $('nav-apps-count').textContent = data.packages.length ? String(data.packages.length) : '';
+  if (!data.packages.length) {
+    body.replaceChildren(empty('Everything winget knows about is up to date.'));
+    $('apps-updates-bar').hidden = true;
+    return;
+  }
+  const list = el('div', 'list apps-updates');
+  for (const pkg of data.packages) {
+    list.append(appCheckRow(pkg.name, `${pkg.version} to ${pkg.available}`, a.selected.has(pkg.id), a.busy, (on) => {
+      if (on) a.selected.add(pkg.id);
+      else a.selected.delete(pkg.id);
+      appsBars();
+    }));
+  }
+  body.replaceChildren(list);
+  appsBars();
+}
+
+function appsBars() {
+  const a = state.apps;
+  const packages = a.upgrades && a.upgrades.packages ? a.upgrades.packages.length : 0;
+  $('apps-updates-bar').hidden = !packages;
+  $('apps-updates-count').textContent = `${a.selected.size} of ${packages} ticked. Close a program before updating it.`;
+  $('apps-update').disabled = a.busy || !a.selected.size;
+  $('apps-tick-all').textContent = a.selected.size === packages ? 'Untick all' : 'Tick all';
+  $('apps-tick-all').disabled = a.busy;
+}
+
+async function runApps(job, count) {
+  const a = state.apps;
+  a.busy = true;
+  renderAppUpdates();
+  $('apps-report').replaceChildren();
+  $('apps-progress').hidden = false;
+  $('apps-progress-fill').style.width = '0%';
+  $('apps-stop-wrap').hidden = false;
+  $('apps-stop').disabled = false;
+  $('apps-refresh').disabled = true;
+  $('apps-progress-label').textContent = `Starting ${count} program${count === 1 ? '' : 's'}…`;
+  try {
+    renderAppsReport((await job()).results);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+  a.busy = false;
+  $('apps-progress').hidden = true;
+  $('apps-stop-wrap').hidden = true;
+  loadApps();
+}
+
+function renderAppsReport(results) {
+  const failed = results.filter((r) => r.status === 'failed');
+  const done = results.filter((r) => r.status === 'done' || r.status === 'current');
+  const box = el('div', `ar-summary ${failed.length ? 'is-warn' : 'is-good'}`);
+  box.append(el('div', 'ar-summary-lead', failed.length
+    ? `${done.length} of ${results.length} finished, ${failed.length} failed`
+    : `All ${done.length} finished`));
+  for (const r of results.filter((x) => x.status === 'failed' || x.status === 'skipped' || x.status === 'current')) {
+    box.append(el('div', 'ar-summary-sub', `${r.name}: ${r.message}`));
+  }
+  $('apps-report').replaceChildren(box);
+}
+
+$('apps-refresh').addEventListener('click', loadApps);
+$('apps-tick-all').addEventListener('click', () => {
+  const a = state.apps;
+  const all = a.upgrades.packages;
+  a.selected = a.selected.size === all.length ? new Set() : new Set(all.map((p) => p.id));
+  renderAppUpdates();
+});
+$('apps-update').addEventListener('click', () => {
+  const a = state.apps;
+  const items = a.upgrades.packages.filter((p) => a.selected.has(p.id));
+  runApps(() => window.pc.apps.upgrade(items.map(({ id, name }) => ({ id, name }))), items.length);
+});
+$('apps-stop').addEventListener('click', () => {
+  $('apps-stop').disabled = true;
+  $('apps-stop').textContent = 'Stopping after this one…';
+  window.pc.apps.stop().catch(() => {});
+});
+window.pc.apps.onProgress((event) => {
+  const { total, done, id, name, finished, phase, got, size } = event;
+  if (state.install.busy) {
+    installProgress(id, event, finished);
+    return;
+  }
+  if (finished) return;
+  const line = phase === 'download' && size ? `Downloading ${formatBytes(got)} of ${formatBytes(size)}` : phase === 'download' ? 'Downloading' : phase === 'queued' ? 'Downloaded, waiting its turn' : 'Installing';
+  $('apps-progress-fill').style.width = `${Math.round((done / total) * 100)}%`;
+  $('apps-progress-label').textContent = `${done} of ${total} finished. ${name}: ${line}`.slice(0, 160);
+});
+
+/* Install programs --------------------------------------------------------- */
+
+async function loadInstall() {
+  const k = state.install;
+  k.loaded = true;
+  $('install-refresh').disabled = true;
+  $('install-bar').hidden = true;
+  $('install-browse').hidden = true;
+  $('install-body').hidden = false;
+  $('install-report').replaceChildren();
+  $('install-body').replaceChildren(empty("Checking what's on this PC…"));
+  try {
+    k.data = await window.pc.apps.catalogue();
+    k.picks = new Set(state.prefs ? state.prefs.appPicks : k.data.apps.filter((p) => p.pick).map((p) => p.id));
+    $('install-body').hidden = k.mode === 'browse';
+    $('install-browse').hidden = k.mode !== 'browse';
+    $('install-modes').hidden = false;
+    if (k.mode === 'browse') {
+      loadBrowse();
+      if (k.data.available) installBar();
+    } else {
+      renderInstall();
+    }
+  } catch (error) {
+    $('install-body').replaceChildren(empty(error.message));
+  }
+  $('install-refresh').disabled = false;
+}
+
+function saveInstallPicks() {
+  const k = state.install;
+  window.pc.settings.set('appPicks', [...k.picks]).then((view) => {
+    state.prefs = view.prefs;
+  }).catch((error) => toast(error.message, 'error'));
+}
+
+function renderInstall() {
+  const k = state.install;
+  const body = $('install-body');
+  if (!k.data.available) {
+    body.replaceChildren(appsUnavailable());
+    return;
+  }
+  const term = k.search.trim().toLowerCase();
+  const shown = k.data.apps.filter((p) => !term || `${p.name} ${p.group}`.toLowerCase().includes(term));
+  body.replaceChildren();
+  if (!shown.length) {
+    const none = el('div', 'empty');
+    none.append(el('div', '', 'Nothing on the list matches.'));
+    const wider = el('button', 'btn btn-ghost btn-small browse-wider', `Search everything for "${k.search.trim()}"`);
+    wider.addEventListener('click', () => {
+      k.browse.query = k.search.trim();
+      k.browse.page = 0;
+      k.search = '';
+      setInstallMode('browse');
+    });
+    none.append(wider);
+    body.append(none);
+  }
+  const columns = el('div', 'tb-columns');
+  for (const group of [...new Set(shown.map((p) => p.group))]) {
+    const card = el('div', 'tb-card apps-card');
+    card.append(el('div', 'tb-card-title', group));
+    for (const app of shown.filter((p) => p.group === group)) {
+      const current = app.status === 'current';
+      const tag = current ? 'Installed' : app.status === 'outdated' ? 'Update' : '';
+      const detail = app.status === 'outdated' ? `${app.version} to ${app.available}` : '';
+      card.append(appCheckRow(app.name, detail, current || k.picks.has(app.id), current, (on) => {
+        if (on) k.picks.add(app.id);
+        else k.picks.delete(app.id);
+        saveInstallPicks();
+        installBar();
+      }, tag));
+    }
+    columns.append(card);
+  }
+  body.append(columns);
+  installBar();
+}
+
+function installBar() {
+  const k = state.install;
+  const chosen = k.data.apps.filter((p) => k.picks.has(p.id));
+  const extras = [...k.extras.values()];
+  const toInstall = chosen.filter((p) => p.status === 'missing').length + extras.filter((p) => p.status === 'missing').length;
+  const toUpdate = chosen.filter((p) => p.status === 'outdated').length + extras.filter((p) => p.status === 'outdated').length;
+  const parts = [];
+  if (toInstall) parts.push(`${toInstall} to install`);
+  if (toUpdate) parts.push(`${toUpdate} to update`);
+  $('install-bar').hidden = false;
+  $('install-count').textContent = parts.length ? `${parts.join(', ')}.${extras.length ? ` ${extras.length} from outside BOB's list.` : ' BOB remembers your ticks.'}` : 'Nothing ticked needs doing.';
+  $('install-go').hidden = false;
+  $('install-go').disabled = !parts.length;
+  $('install-go').textContent = toUpdate && !toInstall ? 'Update' : toUpdate ? 'Install and update' : 'Install';
+  $('install-essentials').hidden = k.mode === 'browse';
+  $('install-clear').hidden = false;
+  $('install-stop').hidden = true;
+  $('install-back').hidden = true;
+}
+
+/* Search and browse -------------------------------------------------------- */
+
+const BROWSE_CATEGORIES = [
+  ['', 'All'], ['browser', 'Browsers'], ['chat', 'Chat'], ['video', 'Video'], ['music', 'Music'], ['image', 'Images'],
+  ['pdf', 'PDF'], ['office', 'Office'], ['game', 'Games'], ['security', 'Security'], ['backup', 'Backup'], ['network', 'Network'],
+  ['disk', 'Disks'], ['remote-desktop', 'Remote desktop'], ['utility', 'Utilities'], ['editor', 'Editors'], ['developer-tools', 'Developer tools'],
+];
+
+function setInstallMode(mode) {
+  const k = state.install;
+  k.mode = mode;
+  const browsing = mode === 'browse';
+  $('install-mode-list').setAttribute('aria-pressed', String(!browsing));
+  $('install-mode-browse').setAttribute('aria-pressed', String(browsing));
+  $('install-browse').hidden = !browsing;
+  $('install-body').hidden = browsing;
+  $('install-search').placeholder = browsing ? 'Search everything in winget…' : "Search BOB's list…";
+  $('install-search').value = browsing ? k.browse.query : k.search;
+  if (browsing) loadBrowse();
+  else if (k.data) renderInstall();
+  if (k.data && k.data.available) installBar();
+}
+
+function renderBrowseTags() {
+  const k = state.install;
+  $('browse-tags').replaceChildren(...BROWSE_CATEGORIES.map(([tag, label]) => {
+    const chip = el('button', 'browse-chip', label);
+    chip.setAttribute('aria-pressed', String(k.browse.tag === tag));
+    chip.addEventListener('click', () => {
+      k.browse.tag = tag;
+      k.browse.page = 0;
+      renderBrowseTags();
+      loadBrowse();
+    });
+    return chip;
+  }));
+}
+
+async function loadBrowse() {
+  const k = state.install;
+  const b = k.browse;
+  const ticket = ++b.ticket;
+  if (!$('browse-tags').children.length) renderBrowseTags();
+  $('browse-results').replaceChildren(empty('Searching…'));
+  $('browse-pager').hidden = true;
+  try {
+    const data = await window.pc.apps.browse({ query: b.query, tag: b.tag, page: b.page });
+    if (ticket !== b.ticket) return;
+    b.data = data;
+    renderBrowse();
+  } catch (error) {
+    if (ticket === b.ticket) $('browse-results').replaceChildren(empty(error.message));
+  }
+}
+
+function browseRow(row) {
+  const k = state.install;
+  const current = row.status === 'current';
+  const picked = row.onList ? k.picks.has(row.id) : k.extras.has(row.id);
+  const tag = current ? 'Installed' : row.status === 'outdated' ? 'Update' : row.onList ? "On BOB's list" : '';
+  const line = el('label', `clean-row${current ? ' is-empty' : ''}`);
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = current || picked;
+  box.disabled = current;
+  box.addEventListener('change', () => {
+    if (row.onList) {
+      if (box.checked) k.picks.add(row.id);
+      else k.picks.delete(row.id);
+      saveInstallPicks();
+    } else if (box.checked) {
+      k.extras.set(row.id, row);
+    } else {
+      k.extras.delete(row.id);
+    }
+    installBar();
+  });
+  const text = el('div', 'clean-body');
+  text.append(el('div', 'clean-name', row.name), el('div', 'clean-desc', `${row.id}${row.version ? `, ${row.version}` : ''}`));
+  const more = el('button', 'browse-more', 'Details');
+  more.type = 'button';
+  const info = el('div', 'browse-details');
+  info.hidden = true;
+  more.addEventListener('click', async () => {
+    if (!info.hidden) {
+      info.hidden = true;
+      return;
+    }
+    info.hidden = false;
+    info.textContent = 'Looking it up…';
+    try {
+      info.textContent = (await window.pc.apps.details(row.id)).text || 'winget has no details for this one.';
+    } catch (error) {
+      info.textContent = error.message;
+    }
+  });
+  text.append(more, info);
+  line.append(box, text);
+  if (tag) line.append(el('span', 'tag', tag));
+  return line;
+}
+
+function renderBrowse() {
+  const k = state.install;
+  const d = k.browse.data;
+  const body = $('browse-results');
+  if (!d.available) {
+    body.replaceChildren(appsUnavailable());
+    return;
+  }
+  if (!d.rows.length) {
+    body.replaceChildren(empty('Nothing in winget matches that.'));
+    return;
+  }
+  const list = el('div', 'list browse-list');
+  list.append(...d.rows.map(browseRow));
+  body.replaceChildren(list);
+  $('browse-pager').hidden = false;
+  $('browse-page-label').textContent = `Page ${d.page + 1} of ${d.pages.toLocaleString()}, ${d.total.toLocaleString()} program${d.total === 1 ? '' : 's'}`;
+  $('browse-prev').disabled = d.page === 0;
+  $('browse-next').disabled = d.page >= d.pages - 1;
+  document.querySelector('.content').scrollTop = 0;
+}
+
+function browseTurn(step) {
+  state.install.browse.page += step;
+  loadBrowse();
+}
+
+$('install-mode-list').addEventListener('click', () => setInstallMode('list'));
+$('install-mode-browse').addEventListener('click', () => setInstallMode('browse'));
+$('browse-prev').addEventListener('click', () => browseTurn(-1));
+$('browse-next').addEventListener('click', () => browseTurn(1));
+
+const INSTALL_STATE = { waiting: 'Waiting', running: 'Working', done: 'Done', current: 'Done', failed: 'Failed', skipped: 'Skipped' };
+const INSTALL_TAG = { done: 'tag-ok', current: 'tag-ok', failed: 'tag-danger', skipped: 'tag-warn', running: 'tag-scope-public', waiting: '' };
+
+// Built once and then updated in place, or the moving bars would restart every tick.
+function renderInstallQueue() {
+  const list = el('div', 'list install-queue');
+  for (const item of state.install.queue) {
+    const row = el('div', 'clean-row');
+    const text = el('div', 'clean-body');
+    item.ui = {
+      tag: el('span', 'tag', ''),
+      detail: el('div', 'clean-desc', ''),
+      bar: el('div', 'progress-bar install-row-bar'),
+      fill: el('div', 'progress-fill'),
+    };
+    item.ui.bar.append(item.ui.fill);
+    item.ui.bar.hidden = true;
+    text.append(el('div', 'clean-name', item.name), item.ui.bar, item.ui.detail);
+    row.append(text, item.ui.tag);
+    list.append(row);
+    paintInstallItem(item);
+  }
+  $('install-body').replaceChildren(list);
+}
+
+function installClock(ms) {
+  const seconds = Math.floor(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function paintInstallItem(item) {
+  const { tag, detail, bar, fill } = item.ui;
+  const running = item.state === 'running';
+  tag.className = `tag ${INSTALL_TAG[item.state]}`;
+  tag.textContent = running ? ({ download: 'Downloading', queued: 'Downloaded', install: 'Installing' }[item.phase] || 'Working') : INSTALL_STATE[item.state];
+  bar.hidden = !running || item.phase === 'queued';
+  if (!running) {
+    detail.textContent = item.detail;
+    return;
+  }
+  if (item.phase === 'queued') {
+    detail.textContent = 'Waiting its turn to install.';
+    return;
+  }
+  if (item.phase === 'download') {
+    const known = item.size > 0;
+    fill.classList.toggle('is-indeterminate', !known);
+    if (known) {
+      const percent = Math.min(100, Math.round((item.got / item.size) * 100));
+      fill.style.width = `${percent}%`;
+      detail.textContent = `${formatBytes(Math.min(item.got, item.size))} of ${formatBytes(item.size)}, ${percent}%`;
+    } else {
+      detail.textContent = item.got ? `${formatBytes(item.got)} so far` : 'Starting the download…';
+    }
+    return;
+  }
+  fill.classList.remove('is-indeterminate');
+  fill.style.width = `${Math.round(item.fraction * 100)}%`;
+  const spent = installClock(Date.now() - item.phaseStarted);
+  const wrote = item.written ? `${formatBytes(item.written)} written` : 'Starting the installer';
+  detail.textContent = item.quietMs > 60000
+    ? `${wrote}, ${spent}. Gone quiet. If a Windows permission box is open, it needs a click.`
+    : `${wrote}, ${spent}. The bar follows what the installer writes, so it's a guide, not an exact figure.`;
+}
+
+// Downloads and installs each count for half of a program's share.
+function paintInstallOverall() {
+  const { queue } = state.install;
+  let share = 0;
+  let finished = 0;
+  for (const item of queue) {
+    if (item.state !== 'waiting' && item.state !== 'running') {
+      share += 1;
+      finished += 1;
+    } else if (item.phase === 'queued') {
+      share += 0.5;
+    } else if (item.phase === 'install') {
+      share += 0.5 + item.fraction / 2;
+    } else if (item.phase === 'download' && item.size > 0) {
+      share += Math.min(1, item.got / item.size) / 2;
+    }
+  }
+  $('install-progress-fill').style.width = `${Math.round((share / queue.length) * 100)}%`;
+  $('install-progress-label').textContent = `${finished} of ${queue.length} finished`;
+}
+
+function installProgress(id, step, finished) {
+  const k = state.install;
+  const item = k.queue.find((q) => q.id === id);
+  if (!item) return;
+  if (finished) {
+    item.state = finished.status;
+    item.detail = finished.message;
+  } else {
+    item.state = 'running';
+    if (step.phase !== item.phase) item.phaseStarted = Date.now();
+    item.phase = step.phase;
+    if (step.phase === 'download') {
+      item.got = step.got || 0;
+      item.size = step.size || item.size;
+    }
+    if (step.phase === 'install') {
+      item.written = step.written || 0;
+      item.fraction = step.fraction || 0;
+      item.quietMs = step.quietMs || 0;
+    }
+  }
+  paintInstallItem(item);
+  paintInstallOverall();
+  const left = k.queue.filter((q) => q.state === 'waiting' || q.state === 'running').length;
+  $('install-count').textContent = left ? `${left} of ${k.queue.length} still to do. You can leave this running.` : 'Finishing…';
+}
+
+async function runInstall() {
+  const k = state.install;
+  const extras = [...k.extras.values()];
+  if (extras.length) {
+    const go = await confirmAction({
+      title: `Install ${extras.length} program${extras.length === 1 ? '' : 's'} from outside BOB's list?`,
+      body: `${extras.map((p) => p.name).slice(0, 12).join(', ')}${extras.length > 12 ? ', and more' : ''}. These come from winget's community catalogue. winget checks each download against its catalogue entry, but BOB hasn't checked the programs themselves, and each one's licence is accepted for you.`,
+      confirmLabel: 'Install them',
+      danger: false,
+    });
+    if (!go) return;
+  }
+  const chosen = [...k.data.apps.filter((p) => k.picks.has(p.id) && p.status !== 'current'), ...extras];
+  k.busy = true;
+  $('install-modes').hidden = true;
+  $('install-browse').hidden = true;
+  $('install-body').hidden = false;
+  k.queue = chosen.map((p) => ({ id: p.id, name: p.name, state: 'waiting', detail: '', phase: null, got: 0, size: 0, written: 0, fraction: 0, quietMs: 0, phaseStarted: 0 }));
+  $('install-report').replaceChildren();
+  $('install-progress').hidden = false;
+  const clock = setInterval(() => {
+    for (const item of k.queue) if (item.state === 'running') paintInstallItem(item);
+  }, 1000);
+  $('nav-install-count').textContent = 'Running';
+  $('install-search').disabled = true;
+  $('install-refresh').disabled = true;
+  $('install-go').hidden = true;
+  $('install-essentials').hidden = true;
+  $('install-clear').hidden = true;
+  $('install-stop').hidden = false;
+  $('install-stop').disabled = false;
+  $('install-stop').textContent = 'Stop after this install';
+  $('install-count').textContent = `${k.queue.length} to do.`;
+  renderInstallQueue();
+  paintInstallOverall();
+  try {
+    const { results } = await window.pc.apps.install(chosen.map((p) => p.id));
+    const failed = results.filter((r) => r.status === 'failed').length;
+    const skipped = results.filter((r) => r.status === 'skipped').length;
+    const good = results.length - failed - skipped;
+    const box = el('div', `ar-summary ${failed || skipped ? 'is-warn' : 'is-good'}`);
+    box.append(el('div', 'ar-summary-lead', failed || skipped ? `${good} of ${results.length} finished` : `All ${results.length} finished`));
+    if (failed) box.append(el('div', 'ar-summary-sub', 'Your ticks are kept, so going back to the list and pressing the button again retries what failed.'));
+    $('install-report').replaceChildren(box);
+    $('install-count').textContent = 'Finished. A program may need a restart before it works fully.';
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+  clearInterval(clock);
+  k.busy = false;
+  $('install-progress').hidden = true;
+  $('nav-install-count').textContent = '';
+  $('install-search').disabled = false;
+  $('install-refresh').disabled = false;
+  $('install-stop').hidden = true;
+  $('install-back').hidden = false;
+  document.querySelector('.content').scrollTop = 0;
+}
+
+$('install-refresh').addEventListener('click', loadInstall);
+$('install-back').addEventListener('click', () => {
+  state.install.extras = new Map();
+  loadInstall();
+});
+$('install-go').addEventListener('click', runInstall);
+$('install-search').addEventListener('input', (event) => {
+  const k = state.install;
+  if (k.mode === 'browse') {
+    k.browse.query = event.target.value;
+    k.browse.page = 0;
+    clearTimeout(k.browse.timer);
+    k.browse.timer = setTimeout(loadBrowse, 300);
+    return;
+  }
+  k.search = event.target.value;
+  if (k.data) renderInstall();
+});
+$('install-essentials').addEventListener('click', () => {
+  const k = state.install;
+  k.picks = new Set(k.data.apps.filter((p) => p.pick).map((p) => p.id));
+  saveInstallPicks();
+  renderInstall();
+});
+$('install-clear').addEventListener('click', () => {
+  const k = state.install;
+  k.picks = new Set();
+  k.extras = new Map();
+  saveInstallPicks();
+  if (k.mode === 'browse') renderBrowse();
+  else renderInstall();
+  installBar();
+});
+$('install-stop').addEventListener('click', () => {
+  $('install-stop').disabled = true;
+  $('install-stop').textContent = 'Stopping after this install…';
+  window.pc.apps.stop().catch(() => {});
+});
+
+/* Malware checks ----------------------------------------------------------- */
+
+const MW_LEVEL = {
+  danger: { tag: 'Problem', cls: 'tag-danger' },
+  warn: { tag: 'Check this', cls: 'tag-warn' },
+  info: { tag: 'Note', cls: '' },
+  ok: { tag: 'OK', cls: 'tag-ok' },
+};
+
+async function loadMalware() {
+  state.malware.loaded = true;
+  $('malware-refresh').disabled = true;
+  $('malware-body').replaceChildren(empty('Checking…'));
+  try {
+    state.malware.data = await window.pc.malware.read();
+    renderMalware();
+  } catch (error) {
+    $('malware-summary').replaceChildren();
+    $('malware-body').replaceChildren(empty(error.message));
+  } finally {
+    $('malware-refresh').disabled = false;
+  }
+}
+
+function renderMalware() {
+  const { checks, counts } = state.malware.data;
+  const problems = counts.danger + counts.warn;
+
+  const summary = el('div', `ar-summary ${counts.danger ? 'is-warn' : problems ? 'is-warn' : 'is-good'}`);
+  summary.append(el('div', 'ar-summary-lead', counts.danger
+    ? `${counts.danger} problem${counts.danger === 1 ? '' : 's'} found`
+    : counts.warn ? `Nothing certain, ${counts.warn} thing${counts.warn === 1 ? '' : 's'} to check` : 'Nothing suspicious'));
+  summary.append(el('div', 'ar-summary-sub', 'These checks catch common tampering. A clean result does not prove a PC is clean, so run a scan too.'));
+  $('malware-summary').replaceChildren(summary);
+
+  const count = $('nav-malware-count');
+  count.textContent = problems ? String(problems) : '';
+
+  const body = $('malware-body');
+  body.replaceChildren();
+  for (const group of [...new Set(checks.map((c) => c.group))]) {
+    body.append(el('div', 'group-title', group));
+    const list = el('div', 'list');
+    for (const check of checks.filter((c) => c.group === group)) {
+      const row = el('div', 'clean-row mw-row');
+      const text = el('div', 'clean-body');
+      text.append(el('div', 'clean-name', check.title));
+      text.append(el('div', 'clean-desc', check.summary));
+      if (check.details.length) {
+        const details = el('ul', 'mw-details');
+        for (const line of check.details) details.append(el('li', '', line));
+        text.append(details);
+      }
+      const level = MW_LEVEL[check.level];
+      row.append(text, el('span', `tag ${level.cls}`, level.tag));
+      list.append(row);
+    }
+    body.append(list);
+  }
+}
+
+async function runMalwareScan(kind) {
+  if (kind === 'full') {
+    const go = await confirmAction({
+      title: 'Run a full scan?',
+      body: 'Defender checks every file on every drive. It often takes an hour or more and slows the PC while it runs.',
+      confirmLabel: 'Start full scan',
+      danger: false,
+    });
+    if (!go) return;
+  }
+  const buttons = ['malware-quick', 'malware-full', 'malware-update'];
+  for (const id of buttons) $(id).disabled = true;
+  $('malware-stop').hidden = false;
+  $('malware-stop').disabled = false;
+  $('malware-progress').hidden = false;
+  $('malware-progress-label').textContent = kind === 'update' ? 'Updating definitions…' : 'Scanning. You can carry on using BOB while this runs.';
+  $('malware-result').replaceChildren();
+  try {
+    const result = await window.pc.malware.scan(kind);
+    const good = result.outcome === 'clean';
+    const box = el('div', `ar-summary ${good ? 'is-good' : 'is-warn'}`);
+    box.append(el('div', 'ar-summary-lead', result.message));
+    box.append(el('div', 'ar-summary-sub', `${result.label}, ${formatDuration(result.seconds)}`));
+    $('malware-result').replaceChildren(box);
+    if (kind !== 'update' || good) loadMalware();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    for (const id of buttons) $(id).disabled = false;
+    $('malware-stop').hidden = true;
+    $('malware-progress').hidden = true;
+  }
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+$('malware-refresh').addEventListener('click', loadMalware);
+$('malware-quick').addEventListener('click', () => runMalwareScan('quick'));
+$('malware-full').addEventListener('click', () => runMalwareScan('full'));
+$('malware-update').addEventListener('click', () => runMalwareScan('update'));
+$('malware-stop').addEventListener('click', () => {
+  $('malware-stop').disabled = true;
+  window.pc.malware.stop().catch(() => {});
+});
+$('malware-open').addEventListener('click', () => window.pc.openLink('windowsdefender:').catch((error) => toast(error.message, 'error')));
+window.pc.malware.onProgress(({ line }) => {
+  if (line && !/^(Scan starting|Scan finished)/i.test(line)) $('malware-progress-label').textContent = line.slice(0, 140);
+});
+
+/* Find a tool --------------------------------------------------------------- */
+
+// Words people actually type, which often aren't what the tool is called.
+const FINDER_WORDS = {
+  overview: 'home dashboard summary start',
+  tuneup: 'performance speed slow optimise optimize tweak faster suggestions power plan driver update outdated',
+  cleanup: 'junk temp temporary disk space free cache recycle bin windows.old',
+  files: 'big space storage treemap disk full',
+  dupes: 'duplicate copies same files space',
+  registry: 'invalid orphan keys broken entries',
+  startup: 'boot slow login logon run tasks',
+  programs: 'uninstall remove apps software leftovers',
+  stress: 'burn in crash freeze overheating temperature restart random reboot unstable overclock benchmark disk speed load test ram cpu gpu',
+  kit: 'backup reinstall wipe format factory reset documents desktop pictures bookmarks save customer data usb before',
+  apps: 'update upgrade outdated winget software programs',
+  install: 'ninite browse search catalogue new pc setup install software programs apps winget chrome firefox 7-zip vlc adobe reader zoom office libreoffice teamviewer steam',
+  explorer: 'file extensions hidden files context menu right click taskbar',
+  system: 'specs model serial motherboard bios cpu ram memory processor windows version activation',
+  devices: 'device manager driver error yellow unknown code problem',
+  disks: 'partition drive ssd hdd smart health format volume',
+  gpu: 'graphics video nvidia fan temperature temp overheating power limit vbios clock',
+  monitor: 'cpu ram usage load task manager live processes',
+  battery: 'laptop wear charge capacity health',
+  hwtest: 'keyboard mouse speaker sound audio microphone webcam camera screen dead pixel touch',
+  ghosts: 'phantom hidden old removed devices',
+  drivers: 'backup save export reinstall',
+  network: 'internet ip ping dns winsock reset speed test adapter no connection',
+  wifi: 'wifi password wireless key ssid forgot',
+  connections: 'ports listening netstat open remote',
+  malware: 'virus scan defender hosts proxy dns hijack infected trojan adware antivirus',
+  security: 'firewall uac secure boot tpm antivirus',
+  autoruns: 'startup scheduled tasks services extensions suspicious persistence',
+  bitlocker: 'encryption recovery key locked encrypted drive',
+  accounts: 'user password local admin administrator login locked sign in',
+  keys: 'licence license windows office activation serial product',
+  report: 'customer print summary pdf export health',
+  events: 'crash bsod blue screen error log reliability freeze restart',
+  repair: 'sfc dism chkdsk corrupt broken system files fix windows',
+  toolbox: 'console run command tools regedit cmd services',
+  backups: 'restore undo quarantine restore point',
+  settings: 'theme dark light colours options preferences usb portable stick traces leftovers temp',
+  update: 'new version latest',
+};
+
+const finder = { items: [], results: [], active: 0, toolsLoaded: false };
+
+function finderItems() {
+  return [...document.querySelectorAll('.tab'), null].map((tab) => {
+    if (!tab) return { kind: 'view', view: 'overview', label: 'Overview', where: 'Home', words: FINDER_WORDS.overview };
+    const view = tab.dataset.view;
+    const group = tab.closest('.tabs');
+    const label = tab.firstChild.textContent.trim();
+    return { kind: 'view', view, label, where: group.dataset.title.replace('&amp;', '&'), words: FINDER_WORDS[view] || '' };
+  });
+}
+
+async function finderLoadTools() {
+  if (finder.toolsLoaded) return;
+  finder.toolsLoaded = true;
+  try {
+    const data = await window.pc.toolbox.list();
+    for (const tool of data.tools) {
+      finder.items.push({ kind: 'tool', tool, label: tool.label, where: `Toolbox, ${tool.group}`, words: `${tool.id} ${tool.desc}` });
+    }
+    if (document.activeElement === $('finder-input')) finderSearch();
+  } catch {
+    finder.toolsLoaded = false;
+  }
+}
+
+function finderScore(item, terms) {
+  const label = item.label.toLowerCase();
+  const words = `${item.where} ${item.words}`.toLowerCase();
+  let score = item.kind === 'view' ? 1 : 0;
+  for (const term of terms) {
+    if (label.startsWith(term)) score += 10;
+    else if (new RegExp(`\\b${term.replace(/[^a-z0-9]/g, '\\$&')}`).test(label)) score += 8;
+    else if (label.includes(term)) score += 6;
+    else if (new RegExp(`\\b${term.replace(/[^a-z0-9]/g, '\\$&')}`).test(words)) score += 4;
+    else if (words.includes(term)) score += 2;
+    else return 0;
+  }
+  return score;
+}
+
+function finderSearch() {
+  const terms = $('finder-input').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const box = $('finder-results');
+  if (!terms.length) {
+    box.hidden = true;
+    finder.results = [];
+    return;
+  }
+  finder.results = finder.items
+    .map((item) => ({ item, score: finderScore(item, terms) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
+    .slice(0, 8)
+    .map((r) => r.item);
+  finder.active = 0;
+  renderFinder();
+}
+
+function renderFinder() {
+  const box = $('finder-results');
+  box.replaceChildren();
+  box.hidden = false;
+  if (!finder.results.length) {
+    box.append(el('div', 'finder-none', 'Nothing matches.'));
+    return;
+  }
+  finder.results.forEach((item, index) => {
+    const row = el('button', `finder-row${index === finder.active ? ' is-active' : ''}`);
+    row.type = 'button';
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(index === finder.active));
+    row.append(el('span', 'finder-label', item.label), el('span', 'finder-where', item.where));
+    row.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      finderGo(item);
+    });
+    box.append(row);
+  });
+}
+
+function finderClose() {
+  $('finder-input').value = '';
+  $('finder-results').hidden = true;
+  finder.results = [];
+  $('finder-input').blur();
+}
+
+function finderGo(item) {
+  finderClose();
+  if (item.kind === 'view') {
+    show(item.view);
+    return;
+  }
+  // A tool can restart the PC, so go to it rather than running it from a search box.
+  state.toolbox.search = item.label;
+  $('toolbox-search').value = item.label;
+  show('toolbox');
+  if (state.toolbox.data) renderToolbox();
+}
+
+finder.items = finderItems();
+$('finder-input').addEventListener('input', finderSearch);
+$('finder-input').addEventListener('focus', () => {
+  finderLoadTools();
+  finderSearch();
+});
+$('finder-input').addEventListener('blur', () => {
+  $('finder-results').hidden = true;
+});
+$('finder-input').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') finderClose();
+  else if (event.key === 'Enter' && finder.results[finder.active]) finderGo(finder.results[finder.active]);
+  else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && finder.results.length) {
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    finder.active = (finder.active + step + finder.results.length) % finder.results.length;
+    renderFinder();
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    $('finder-input').focus();
+    $('finder-input').select();
+  }
+});
 
 /* Boot --------------------------------------------------------------------- */
 

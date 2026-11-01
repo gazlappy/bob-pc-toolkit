@@ -5,7 +5,9 @@
 
 const { app } = require('electron');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const portable = require('./portable');
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
@@ -22,13 +24,19 @@ function write(settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
+// On a USB stick these belong to the PC they were made on, not to the stick.
+const PER_PC = new Set(['tuneupChanges', 'nvflashPath']);
+function scoped(key) {
+  return PER_PC.has(key) && portable.active() ? `${key}@${os.hostname()}` : key;
+}
+
 function get(key) {
-  return read()[key];
+  return read()[scoped(key)];
 }
 
 function set(key, value) {
   const s = read();
-  s[key] = value;
+  s[scoped(key)] = value;
   write(s);
 }
 
@@ -37,6 +45,14 @@ function set(key, value) {
 const isBool = (v) => typeof v === 'boolean';
 const PREFS = {
   theme: { def: 'dark', ok: (v) => ['system', 'dark', 'light', 'black', 'slate', 'workshop', 'neon'].includes(v) },
+  toolboxPins: {
+    def: ['devmgmt', 'diskmgmt', 'taskmgr', 'services', 'regedit', 'cmd'],
+    ok: (v) => Array.isArray(v) && v.length <= 30 && v.every((id) => typeof id === 'string' && /^[a-z0-9-]{1,30}$/.test(id)),
+  },
+  appPicks: {
+    def: ['Google.Chrome', 'VideoLAN.VLC', 'Adobe.Acrobat.Reader.64-bit', 'Microsoft.VCRedist.2015+.x64', '7zip.7zip'],
+    ok: (v) => Array.isArray(v) && v.length <= 200 && v.every((id) => typeof id === 'string' && /^[\w.+-]{1,60}$/.test(id)),
+  },
   startView: { def: 'home', ok: (v) => v === 'home' || v === 'last' },
   lastView: { def: 'overview', ok: (v) => typeof v === 'string' && /^[a-z]{2,20}$/.test(v) },
   autoCheckUpdates: { def: true, ok: isBool },

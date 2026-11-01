@@ -18,10 +18,12 @@ const path = require('path');
 const os = require('os');
 const { app, shell } = require('electron');
 const ps = require('./ps');
+const portable = require('./portable');
 
 const LONG_HIVE = { HKLM: 'HKEY_LOCAL_MACHINE', HKCU: 'HKEY_CURRENT_USER', HKCR: 'HKEY_CLASSES_ROOT' };
 
 function root() {
+  if (portable.active()) return path.join(portable.machineDir(), 'backups');
   return path.join(app.getPath('userData'), 'backups');
 }
 

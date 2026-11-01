@@ -2851,48 +2851,138 @@ select:focus {
 
 /* Toolbox ------------------------------------------------------------------ */
 
-.tool-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
+/* Newspaper columns: as many as fit, cards never split across two. */
+.tb-pins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.tool-tile {
-  text-align: left;
-  background: var(--bg-raised);
+.tb-pin {
+  padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 12px 14px;
-  cursor: pointer;
+  border-radius: 8px;
+  background: var(--bg-raised);
   color: var(--text);
-  font-family: inherit;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }
 
-.tool-tile:hover {
+.tb-pin:hover {
   background: var(--bg-hover);
-  border-color: var(--accent);
+  border-color: var(--line-strong);
 }
 
-.tool-tile.is-action {
-  border-left: 3px solid var(--accent-dim);
+.tb-pin.is-busy {
+  opacity: 0.6;
 }
 
-.tool-tile.is-busy {
-  opacity: 0.5;
-  pointer-events: none;
+.tb-pin.is-danger {
+  color: var(--danger-text);
 }
 
-.tool-label {
-  font-weight: 600;
+.tb-columns {
+  columns: 270px;
+  column-gap: 12px;
+}
+
+.tb-card {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  padding: 10px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.tb-card-title {
+  padding: 0 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tb-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: 6px;
+}
+
+.tb-row:hover,
+.tb-row:focus-within {
+  background: var(--bg-hover);
+}
+
+.tb-row.is-busy {
+  opacity: 0.6;
+}
+
+.tb-run {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
   font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.tool-desc {
+.tb-row.is-danger .tb-run {
+  color: var(--danger-text);
+}
+
+.tb-label {
+  display: block;
+}
+
+.tb-desc {
+  display: block;
   color: var(--muted);
   font-size: 12px;
-  margin-top: 2px;
+}
+
+.tb-star {
+  flex: 0 0 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tb-row:hover .tb-star,
+.tb-star:focus-visible,
+.tb-star[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.tb-star[aria-pressed="true"] {
+  color: var(--warn);
+}
+
+.tb-star:hover {
+  color: var(--text);
+}
+
+.tb-pin:focus-visible,
+.tb-run:focus-visible,
+.tb-star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* Disks & partitions ------------------------------------------------------- */
@@ -3584,4 +3674,398 @@ select:focus {
 
 @keyframes boot-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Find a tool -------------------------------------------------------------- */
+.finder {
+  position: relative;
+  width: min(380px, 40vw);
+  margin: 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.finder-input {
+  width: 100%;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.finder-input::placeholder {
+  color: var(--muted);
+}
+
+.finder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.finder-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--elevated);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.finder-row {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.finder-row:hover,
+.finder-row.is-active {
+  background: var(--bg-hover);
+}
+
+.finder-where {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.finder-none {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Malware checks ----------------------------------------------------------- */
+.mw-scan {
+  margin-bottom: 18px;
+}
+
+.mw-scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mw-row {
+  align-items: flex-start;
+}
+
+.mw-details {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.tag.tag-ok {
+  color: var(--good-text);
+  border-color: var(--good-line);
+  background: var(--good-soft);
+}
+
+/* Apps ---------------------------------------------------------------------- */
+.apps-hint {
+  margin: 6px 0 10px;
+  font-size: 13px;
+}
+
+.apps-card .clean-row {
+  padding: 5px 8px;
+  border: 0;
+}
+
+.apps-stop {
+  margin-top: 12px;
+}
+
+.apps-updates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  margin-bottom: 18px;
+}
+
+.apps-updates .clean-row {
+  padding: 7px 14px;
+  border-top: 0;
+}
+
+.apps-updates .clean-desc {
+  font-size: 12px;
+}
+
+/* Reinstall kit ------------------------------------------------------------- */
+.kit-dest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.kit-dest-text {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.kit-dest-text.is-danger {
+  color: var(--danger-text);
+}
+
+.kit-user {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kit-folders {
+  margin-bottom: 14px;
+}
+
+.kit-empty-user {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kit-note {
+  margin-top: 10px;
+}
+
+.kit-open {
+  margin-top: 10px;
+}
+
+#view-kit .progress {
+  margin-bottom: 12px;
+}
+
+#view-kit .selection-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 14px;
+  background: var(--bg-raised);
+}
+
+/* Stress test --------------------------------------------------------------- */
+.stress-time {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 12px 14px;
+}
+
+#view-stress .clean-name,
+#view-stress .clean-desc {
+  display: block;
+}
+
+#stress-drive {
+  flex-shrink: 0;
+  max-width: 220px;
+}
+
+.stress-status {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.stress-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stress-tile {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.stress-tile-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stress-tile-value {
+  margin-top: 2px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stress-tile-sub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.stress-tile.is-bad .stress-tile-value {
+  color: var(--danger-text);
+}
+
+.stress-tile.is-hot .stress-tile-value {
+  color: var(--warn);
+}
+
+.stress-screen canvas {
+  display: block;
+  width: min(100%, 640px);
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--inset);
+}
+
+.stress-results {
+  margin-bottom: 18px;
+}
+
+.ar-summary.stress-failed {
+  border-color: var(--danger-line);
+  border-left-color: var(--danger);
+  background: var(--danger-faint);
+}
+
+.ar-summary.stress-failed .ar-summary-lead {
+  color: var(--danger-text);
+}
+
+/* Install programs ---------------------------------------------------------- */
+#view-install .install-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 14px;
+  background: var(--bg-raised);
+}
+
+#view-install .apps-card .clean-desc {
+  font-size: 12px;
+}
+
+#view-install .search {
+  width: 260px;
+}
+
+.install-row-bar {
+  margin: 6px 0 4px;
+  max-width: 520px;
+}
+
+#install-progress {
+  margin-bottom: 14px;
+}
+
+/* Search and browse --------------------------------------------------------- */
+.browse-modes,
+.browse-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.browse-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.browse-chip:hover {
+  background: var(--bg-hover);
+}
+
+.browse-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent-dim-text);
+  font-weight: 600;
+}
+
+.browse-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.browse-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+}
+
+.browse-list .clean-row {
+  border-top: 0;
+  align-items: flex-start;
+}
+
+.browse-list .clean-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.browse-more {
+  display: block;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.browse-more:hover {
+  text-decoration: underline;
+}
+
+.browse-details {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--inset);
+  color: var(--text);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.browse-wider {
+  margin-top: 10px;
+}
+
+.browse-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
 }

@@ -13,76 +13,90 @@ const ps = require('./ps');
 
 const TOOLS = [
   // Consoles
-  { id: 'devmgmt', group: 'Consoles', label: 'Device Manager', file: 'devmgmt.msc', desc: 'Devices and drivers' },
-  { id: 'diskmgmt', group: 'Consoles', label: 'Disk Management', file: 'diskmgmt.msc', desc: 'Partitions and volumes' },
-  { id: 'services', group: 'Consoles', label: 'Services', file: 'services.msc', desc: 'Windows services' },
-  { id: 'eventvwr', group: 'Consoles', label: 'Event Viewer', file: 'eventvwr.msc', desc: 'System and application logs' },
-  { id: 'taskschd', group: 'Consoles', label: 'Task Scheduler', file: 'taskschd.msc', desc: 'Scheduled tasks' },
-  { id: 'compmgmt', group: 'Consoles', label: 'Computer Management', file: 'compmgmt.msc', desc: 'The lot in one console' },
-  { id: 'gpedit', group: 'Consoles', label: 'Group Policy Editor', file: 'gpedit.msc', desc: 'Local policy (Pro)' },
-  { id: 'wf', group: 'Consoles', label: 'Firewall (Advanced)', file: 'wf.msc', desc: 'Inbound/outbound rules' },
-  { id: 'certmgr', group: 'Consoles', label: 'Certificates', file: 'certmgr.msc', desc: 'Current-user certificates' },
-  { id: 'printmgmt', group: 'Consoles', label: 'Print Management', file: 'printmanagement.msc', desc: 'Printers and drivers (Pro)' },
-  { id: 'perfmon-rel', group: 'Consoles', label: 'Reliability Monitor', file: 'perfmon', args: '/rel', desc: 'Stability timeline' },
-  { id: 'resmon', group: 'Consoles', label: 'Resource Monitor', file: 'resmon', desc: 'Live CPU/disk/net detail' },
+  { id: 'devmgmt', label: 'Device Manager', file: 'devmgmt.msc', desc: 'Devices and drivers' },
+  { id: 'diskmgmt', label: 'Disk Management', file: 'diskmgmt.msc', desc: 'Partitions and volumes' },
+  { id: 'services', label: 'Services', file: 'services.msc', desc: 'Windows services' },
+  { id: 'eventvwr', label: 'Event Viewer', file: 'eventvwr.msc', desc: 'System and application logs' },
+  { id: 'taskschd', label: 'Task Scheduler', file: 'taskschd.msc', desc: 'Scheduled tasks' },
+  { id: 'compmgmt', label: 'Computer Management', file: 'compmgmt.msc', desc: 'The lot in one console' },
+  { id: 'gpedit', label: 'Group Policy Editor', file: 'gpedit.msc', desc: 'Local policy (Pro)' },
+  { id: 'wf', label: 'Firewall (Advanced)', file: 'wf.msc', desc: 'Inbound/outbound rules' },
+  { id: 'certmgr', label: 'Certificates', file: 'certmgr.msc', desc: 'Current-user certificates' },
+  { id: 'printmgmt', label: 'Print Management', file: 'printmanagement.msc', desc: 'Printers and drivers (Pro)' },
+  { id: 'perfmon-rel', label: 'Reliability Monitor', file: 'perfmon', args: '/rel', desc: 'Stability timeline' },
+  { id: 'resmon', label: 'Resource Monitor', file: 'resmon', desc: 'Live CPU/disk/net detail' },
 
   // System tools
-  { id: 'taskmgr', group: 'System tools', label: 'Task Manager', file: 'taskmgr', desc: 'Processes and startup' },
-  { id: 'msinfo32', group: 'System tools', label: 'System Information', file: 'msinfo32', desc: 'Full spec sheet' },
-  { id: 'winver', group: 'System tools', label: 'Windows Version', file: 'winver', desc: 'Build and edition' },
-  { id: 'dxdiag', group: 'System tools', label: 'DirectX Diagnostic', file: 'dxdiag', desc: 'Graphics and sound' },
-  { id: 'msconfig', group: 'System tools', label: 'System Configuration', file: 'msconfig', desc: 'Boot and services' },
-  { id: 'regedit', group: 'System tools', label: 'Registry Editor', file: 'regedit', desc: 'Edit the registry' },
-  { id: 'cmd', group: 'System tools', label: 'Command Prompt', file: 'cmd', desc: 'A console window' },
-  { id: 'powershell', group: 'System tools', label: 'PowerShell', file: 'powershell', desc: 'A PowerShell window' },
-  { id: 'dfrgui', group: 'System tools', label: 'Optimise Drives', file: 'dfrgui', desc: 'Defrag / TRIM' },
-  { id: 'cleanmgr', group: 'System tools', label: 'Disk Cleanup', file: 'cleanmgr', desc: "Windows' own cleaner" },
-  { id: 'rstrui', group: 'System tools', label: 'System Restore', file: 'rstrui', desc: 'Roll back to a point' },
-  { id: 'mdsched', group: 'System tools', label: 'Memory Diagnostic', file: 'mdsched', desc: 'Test the RAM' },
-  { id: 'mstsc', group: 'System tools', label: 'Remote Desktop', file: 'mstsc', desc: 'Connect to another PC' },
-  { id: 'quickassist', group: 'System tools', label: 'Quick Assist', file: 'quickassist', desc: 'Remote help' },
-  { id: 'snip', group: 'System tools', label: 'Snipping Tool', file: 'snippingtool', desc: 'Screenshot a region' },
-  { id: 'sysdm', group: 'System tools', label: 'System Properties', file: 'control', args: 'sysdm.cpl', desc: 'Name, restore, remote' },
-  { id: 'netplwiz', group: 'System tools', label: 'User Accounts', file: 'netplwiz', desc: 'Classic user accounts' },
-  { id: 'credmgr', group: 'System tools', label: 'Credential Manager', file: 'control', args: '/name Microsoft.CredentialManager', desc: 'Saved logins' },
+  { id: 'taskmgr', label: 'Task Manager', file: 'taskmgr', desc: 'Processes and startup' },
+  { id: 'msinfo32', label: 'System Information', file: 'msinfo32', desc: 'Full spec sheet' },
+  { id: 'winver', label: 'Windows Version', file: 'winver', desc: 'Build and edition' },
+  { id: 'dxdiag', label: 'DirectX Diagnostic', file: 'dxdiag', desc: 'Graphics and sound' },
+  { id: 'msconfig', label: 'System Configuration', file: 'msconfig', desc: 'Boot and services' },
+  { id: 'regedit', label: 'Registry Editor', file: 'regedit', desc: 'Edit the registry' },
+  { id: 'cmd', label: 'Command Prompt', file: 'cmd', desc: 'A console window' },
+  { id: 'powershell', label: 'PowerShell', file: 'powershell', desc: 'A PowerShell window' },
+  { id: 'dfrgui', label: 'Optimise Drives', file: 'dfrgui', desc: 'Defrag / TRIM' },
+  { id: 'cleanmgr', label: 'Disk Cleanup', file: 'cleanmgr', desc: "Windows' own cleaner" },
+  { id: 'rstrui', label: 'System Restore', file: 'rstrui', desc: 'Roll back to a point' },
+  { id: 'mdsched', label: 'Memory Diagnostic', file: 'mdsched', desc: 'Test the RAM' },
+  { id: 'mstsc', label: 'Remote Desktop', file: 'mstsc', desc: 'Connect to another PC' },
+  { id: 'quickassist', label: 'Quick Assist', file: 'quickassist', desc: 'Remote help' },
+  { id: 'snip', label: 'Snipping Tool', file: 'snippingtool', desc: 'Screenshot a region' },
+  { id: 'sysdm', label: 'System Properties', file: 'control', args: 'sysdm.cpl', desc: 'Name, restore, remote' },
+  { id: 'netplwiz', label: 'User Accounts', file: 'netplwiz', desc: 'Classic user accounts' },
+  { id: 'credmgr', label: 'Credential Manager', file: 'control', args: '/name Microsoft.CredentialManager', desc: 'Saved logins' },
 
   // Control panels
-  { id: 'appwiz', group: 'Control panels', label: 'Programs & Features', file: 'control', args: 'appwiz.cpl', desc: 'Uninstall programs' },
-  { id: 'optionalfeatures', group: 'Control panels', label: 'Windows Features', file: 'optionalfeatures', desc: 'Turn features on/off' },
-  { id: 'ncpa', group: 'Control panels', label: 'Network Connections', file: 'control', args: 'ncpa.cpl', desc: 'Adapters' },
-  { id: 'inetcpl', group: 'Control panels', label: 'Internet Options', file: 'control', args: 'inetcpl.cpl', desc: 'Proxy, security zones' },
-  { id: 'powercfg', group: 'Control panels', label: 'Power Options', file: 'control', args: 'powercfg.cpl', desc: 'Power plans' },
-  { id: 'mmsys', group: 'Control panels', label: 'Sound', file: 'control', args: 'mmsys.cpl', desc: 'Playback and recording' },
-  { id: 'timedate', group: 'Control panels', label: 'Date and Time', file: 'control', args: 'timedate.cpl', desc: 'Clock and time zone' },
-  { id: 'intl', group: 'Control panels', label: 'Region', file: 'control', args: 'intl.cpl', desc: 'Locale and formats' },
-  { id: 'main', group: 'Control panels', label: 'Mouse', file: 'control', args: 'main.cpl', desc: 'Pointer and buttons' },
-  { id: 'printers', group: 'Control panels', label: 'Devices and Printers', file: 'control', args: 'printers', desc: 'Installed printers' },
-  { id: 'mblctr', group: 'Control panels', label: 'Mobility Center', file: 'mblctr', desc: 'Laptop quick settings' },
-  { id: 'fonts', group: 'Control panels', label: 'Fonts', file: 'control', args: 'fonts', desc: 'Installed fonts' },
+  { id: 'appwiz', label: 'Programs & Features', file: 'control', args: 'appwiz.cpl', desc: 'Uninstall programs' },
+  { id: 'optionalfeatures', label: 'Windows Features', file: 'optionalfeatures', desc: 'Turn features on/off' },
+  { id: 'ncpa', label: 'Network Connections', file: 'control', args: 'ncpa.cpl', desc: 'Adapters' },
+  { id: 'inetcpl', label: 'Internet Options', file: 'control', args: 'inetcpl.cpl', desc: 'Proxy, security zones' },
+  { id: 'powercfg', label: 'Power Options', file: 'control', args: 'powercfg.cpl', desc: 'Power plans' },
+  { id: 'mmsys', label: 'Sound', file: 'control', args: 'mmsys.cpl', desc: 'Playback and recording' },
+  { id: 'timedate', label: 'Date and Time', file: 'control', args: 'timedate.cpl', desc: 'Clock and time zone' },
+  { id: 'intl', label: 'Region', file: 'control', args: 'intl.cpl', desc: 'Locale and formats' },
+  { id: 'main', label: 'Mouse', file: 'control', args: 'main.cpl', desc: 'Pointer and buttons' },
+  { id: 'printers', label: 'Devices and Printers', file: 'control', args: 'printers', desc: 'Installed printers' },
+  { id: 'mblctr', label: 'Mobility Center', file: 'mblctr', desc: 'Laptop quick settings' },
+  { id: 'fonts', label: 'Fonts', file: 'control', args: 'fonts', desc: 'Installed fonts' },
 
   // Settings
-  { id: 'set-update', group: 'Settings', label: 'Windows Update', file: 'ms-settings:windowsupdate', desc: 'Check for updates' },
-  { id: 'set-defender', group: 'Settings', label: 'Windows Security', file: 'ms-settings:windowsdefender', desc: 'Antivirus and firewall' },
-  { id: 'set-apps', group: 'Settings', label: 'Apps & Features', file: 'ms-settings:appsfeatures', desc: 'Installed apps' },
-  { id: 'set-storage', group: 'Settings', label: 'Storage', file: 'ms-settings:storagesense', desc: "What's using the disk" },
-  { id: 'set-about', group: 'Settings', label: 'About / Activation', file: 'ms-settings:about', desc: 'Spec and activation' },
-  { id: 'set-recovery', group: 'Settings', label: 'Recovery', file: 'ms-settings:recovery', desc: 'Reset and advanced start' },
-  { id: 'set-bluetooth', group: 'Settings', label: 'Bluetooth & Devices', file: 'ms-settings:bluetooth', desc: 'Paired devices' },
-  { id: 'set-display', group: 'Settings', label: 'Display', file: 'ms-settings:display', desc: 'Resolution and scaling' },
+  { id: 'set-update', label: 'Windows Update', file: 'ms-settings:windowsupdate', desc: 'Check for updates' },
+  { id: 'set-defender', label: 'Windows Security', file: 'ms-settings:windowsdefender', desc: 'Antivirus and firewall' },
+  { id: 'set-apps', label: 'Apps & Features', file: 'ms-settings:appsfeatures', desc: 'Installed apps' },
+  { id: 'set-storage', label: 'Storage', file: 'ms-settings:storagesense', desc: "What's using the disk" },
+  { id: 'set-about', label: 'About / Activation', file: 'ms-settings:about', desc: 'Spec and activation' },
+  { id: 'set-recovery', label: 'Recovery', file: 'ms-settings:recovery', desc: 'Reset and advanced start' },
+  { id: 'set-bluetooth', label: 'Bluetooth & Devices', file: 'ms-settings:bluetooth', desc: 'Paired devices' },
+  { id: 'set-display', label: 'Display', file: 'ms-settings:display', desc: 'Resolution and scaling' },
 
   // Quick actions
-  { id: 'flushdns', group: 'Quick actions', label: 'Flush DNS cache', kind: 'action', desc: 'Clear the resolver cache', ok: 'DNS cache flushed.' },
-  { id: 'registerdns', group: 'Quick actions', label: 'Re-register DNS', kind: 'action', desc: 'ipconfig /registerdns', ok: 'DNS registration refreshed.' },
-  { id: 'gpupdate', group: 'Quick actions', label: 'Update Group Policy', kind: 'action', desc: 'gpupdate /force', ok: 'Group Policy refreshed.' },
-  { id: 'restorepoint', group: 'Quick actions', label: 'Create restore point', kind: 'action', desc: 'A System Restore checkpoint', ok: 'Restore point created.' },
-  { id: 'highperf', group: 'Quick actions', label: 'High Performance plan', kind: 'action', desc: 'Switch power plan', ok: 'High Performance power plan active.' },
-  { id: 'wsreset', group: 'Quick actions', label: 'Reset Store cache', kind: 'action', desc: 'wsreset', ok: 'Store cache reset started.' },
-  { id: 'spooler', group: 'Quick actions', label: 'Restart Print Spooler', kind: 'action', desc: 'Fixes stuck print queues', ok: 'Print Spooler restarted.' },
-  { id: 'iconcache', group: 'Quick actions', label: 'Rebuild icon cache', kind: 'action', confirm: true, confirmBody: 'The taskbar and desktop will reload while the icon cache is rebuilt. Any open File Explorer windows will close.', desc: 'Fixes broken/blank icons', ok: 'Icon cache rebuilt.' },
-  { id: 'emptybin', group: 'Quick actions', label: 'Empty Recycle Bin', kind: 'action', confirm: true, danger: true, confirmBody: 'This permanently deletes everything in the Recycle Bin on every drive. It cannot be undone.', desc: 'On every drive', ok: 'Recycle Bin emptied.' },
-  { id: 'explorer', group: 'Quick actions', label: 'Restart Explorer', kind: 'action', confirm: true, confirmBody: 'The taskbar and desktop will briefly disappear and reload. Any open File Explorer windows will close.', desc: 'Taskbar and desktop reload', ok: 'Explorer restarted.' },
-  { id: 'reboot-uefi', group: 'Quick actions', label: 'Restart to UEFI / BIOS', kind: 'action', confirm: true, danger: true, confirmBody: 'This restarts the PC NOW and boots straight into the UEFI/BIOS firmware settings. Save any open work first.', desc: 'Reboot into firmware', ok: 'Restarting to firmware…' },
-  { id: 'reboot-recovery', group: 'Quick actions', label: 'Restart to Recovery', kind: 'action', confirm: true, danger: true, confirmBody: 'This restarts the PC NOW into the Advanced Startup / recovery options. Save any open work first.', desc: 'Reboot into WinRE', ok: 'Restarting to recovery…' },
+  { id: 'flushdns', label: 'Flush DNS cache', kind: 'action', desc: 'Clear the resolver cache', ok: 'DNS cache flushed.' },
+  { id: 'registerdns', label: 'Re-register DNS', kind: 'action', desc: 'ipconfig /registerdns', ok: 'DNS registration refreshed.' },
+  { id: 'gpupdate', label: 'Update Group Policy', kind: 'action', desc: 'gpupdate /force', ok: 'Group Policy refreshed.' },
+  { id: 'restorepoint', label: 'Create restore point', kind: 'action', desc: 'A System Restore checkpoint', ok: 'Restore point created.' },
+  { id: 'highperf', label: 'High Performance plan', kind: 'action', desc: 'Switch power plan', ok: 'High Performance power plan active.' },
+  { id: 'wsreset', label: 'Reset Store cache', kind: 'action', desc: 'wsreset', ok: 'Store cache reset started.' },
+  { id: 'spooler', label: 'Restart Print Spooler', kind: 'action', desc: 'Fixes stuck print queues', ok: 'Print Spooler restarted.' },
+  { id: 'iconcache', label: 'Rebuild icon cache', kind: 'action', confirm: true, confirmBody: 'The taskbar and desktop will reload while the icon cache is rebuilt. Any open File Explorer windows will close.', desc: 'Fixes broken/blank icons', ok: 'Icon cache rebuilt.' },
+  { id: 'emptybin', label: 'Empty Recycle Bin', kind: 'action', confirm: true, danger: true, confirmBody: 'This permanently deletes everything in the Recycle Bin on every drive. It cannot be undone.', desc: 'On every drive', ok: 'Recycle Bin emptied.' },
+  { id: 'explorer', label: 'Restart Explorer', kind: 'action', confirm: true, confirmBody: 'The taskbar and desktop will briefly disappear and reload. Any open File Explorer windows will close.', desc: 'Taskbar and desktop reload', ok: 'Explorer restarted.' },
+  { id: 'reboot-uefi', label: 'Restart to UEFI / BIOS', kind: 'action', confirm: true, danger: true, confirmBody: 'This restarts the PC NOW and boots straight into the UEFI/BIOS firmware settings. Save any open work first.', desc: 'Reboot into firmware', ok: 'Restarting to firmware…' },
+  { id: 'reboot-recovery', label: 'Restart to Recovery', kind: 'action', confirm: true, danger: true, confirmBody: 'This restarts the PC NOW into the Advanced Startup / recovery options. Save any open work first.', desc: 'Reboot into WinRE', ok: 'Restarting to recovery…' },
+];
+
+// Grouped by what a tech is trying to do, not by how Windows implements it. The
+// order here is the order on screen, most-used first.
+const GROUPS = [
+  { name: 'Quick fixes', ids: ['flushdns', 'registerdns', 'spooler', 'iconcache', 'wsreset', 'gpupdate', 'highperf', 'restorepoint', 'emptybin'] },
+  { name: 'Restart', ids: ['explorer', 'reboot-uefi', 'reboot-recovery'] },
+  { name: 'Diagnose', ids: ['taskmgr', 'resmon', 'eventvwr', 'perfmon-rel', 'msinfo32', 'dxdiag', 'mdsched', 'winver', 'set-about'] },
+  { name: 'System', ids: ['compmgmt', 'services', 'taskschd', 'msconfig', 'regedit', 'gpedit', 'sysdm', 'rstrui', 'set-update', 'set-recovery', 'cmd', 'powershell', 'snip', 'timedate', 'intl'] },
+  { name: 'Hardware', ids: ['devmgmt', 'printers', 'printmgmt', 'set-display', 'mmsys', 'main', 'set-bluetooth', 'powercfg', 'mblctr'] },
+  { name: 'Disks', ids: ['diskmgmt', 'dfrgui', 'cleanmgr', 'set-storage'] },
+  { name: 'Network', ids: ['ncpa', 'wf', 'inetcpl', 'mstsc', 'quickassist'] },
+  { name: 'Security & accounts', ids: ['set-defender', 'netplwiz', 'credmgr', 'certmgr'] },
+  { name: 'Programs', ids: ['appwiz', 'set-apps', 'optionalfeatures', 'fonts'] },
 ];
 
 const BY_ID = new Map(TOOLS.map((t) => [t.id, t]));
@@ -129,18 +143,24 @@ function resolve(id) {
 }
 
 function list() {
-  return {
-    tools: TOOLS.map((t) => ({
-      id: t.id,
-      group: t.group,
-      label: t.label,
-      desc: t.desc || '',
-      kind: t.kind || 'launch',
-      confirm: Boolean(t.confirm),
-      danger: Boolean(t.danger),
-      confirmBody: t.confirmBody || '',
-    })),
-  };
+  const tools = [];
+  for (const group of GROUPS) {
+    for (const id of group.ids) {
+      const t = BY_ID.get(id);
+      if (!t) continue;
+      tools.push({
+        id: t.id,
+        group: group.name,
+        label: t.label,
+        desc: t.desc || '',
+        kind: t.kind || 'launch',
+        confirm: Boolean(t.confirm),
+        danger: Boolean(t.danger),
+        confirmBody: t.confirmBody || '',
+      });
+    }
+  }
+  return { tools };
 }
 
 async function run(id) {
@@ -166,4 +186,4 @@ async function run(id) {
   return { launched: true, message: `Opened ${tool.label}.` };
 }
 
-module.exports = { list, run, __resolve: resolve };
+module.exports = { list, run, TOOLS, GROUPS, __resolve: resolve };

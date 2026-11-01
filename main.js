@@ -3,7 +3,11 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, nativeTheme, powerSaveBlocker } = require('electron');
+
+// Before anything else: every module below works out where its data lives from this.
+const portable = require('./src/portable');
+portable.apply(app);
 
 const ps = require('./src/ps');
 const sys = require('./src/sys');
@@ -40,6 +44,10 @@ const update = require('./src/update');
 const gpu = require('./src/gpu');
 const tuneup = require('./src/tuneup');
 const settings = require('./src/settings');
+const malware = require('./src/malware');
+const apps = require('./src/apps');
+const kit = require('./src/kit');
+const stress = require('./src/stress');
 
 // Kept as "PC Cleanup" (the app's original name) on purpose: app.getPath's
 // userData folder — where restore points live — derives from this, so keeping it
@@ -333,7 +341,7 @@ handle('clean:scan', () => clean.scan(progress('clean:progress')));
 const LINK_HOSTS = /(^|\.)(nvidia\.com|amd\.com|intel\.com|asus\.com|msi\.com|gigabyte\.com|asrock\.com|dell\.com|hp\.com|lenovo\.com|acer\.com|microsoft\.com|google\.com)$/i;
 handle('sys:openLink', async (url) => {
   const u = String(url || '');
-  if (/^ms-settings:windowsupdate(-optionalupdates)?$/i.test(u)) return shell.openExternal(u);
+  if (/^(ms-settings:windowsupdate(-optionalupdates)?|windowsdefender:)$/i.test(u)) return shell.openExternal(u);
   let parsed;
   try {
     parsed = new URL(u);
@@ -347,6 +355,60 @@ function settingsView() {
   return { prefs: settings.prefs(), theme: resolvedTheme(), systemTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light', nvflash: gpu.findNvflash(), version: update.getConfig().current };
 }
 gpu.setWatchdogTemp(settings.prefs().fanWatchdogTemp);
+handle('usb:status', () => portable.status(app));
+handle('usb:enable', () => portable.enable(settings.SETTINGS_FILE));
+handle('usb:disable', () => portable.disable());
+handle('usb:removeLeftovers', () => portable.removeLeftovers());
+handle('usb:removeLocal', () => portable.removeLocal(app));
+handle('stress:drives', () => stress.drives());
+handle('stress:disk', (letter) => stress.disk(letter, progress('stress:disk')));
+handle('stress:load', async (options) => {
+  const awake = powerSaveBlocker.start('prevent-display-sleep');
+  try {
+    return await stress.load(options, progress('stress:progress'));
+  } finally {
+    powerSaveBlocker.stop(awake);
+  }
+});
+handle('stress:stop', () => stress.stop('you'));
+handle('stress:verdict', (parts) => stress.verdict(parts));
+let kitDestination = null;
+let lastKit = null;
+handle('kit:plan', () => kit.plan());
+handle('kit:measure', (id) => kit.measure(id));
+handle('kit:choose', async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose where to save the kit',
+    buttonLabel: 'Save the kit here',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const check = await kit.checkDestination(result.filePaths[0]);
+  kitDestination = check.onWindowsDrive ? null : check.destination;
+  return check;
+});
+handle('kit:build', async (job) => {
+  if (!kitDestination) throw new Error('Choose where to save the kit first.');
+  const report = await kit.build({ ...job, destination: kitDestination }, progress('kit:progress'));
+  lastKit = report.kitDir;
+  return report;
+});
+handle('kit:stop', () => kit.stop());
+handle('kit:reveal', () => {
+  if (lastKit) shell.openPath(lastKit);
+  return true;
+});
+handle('apps:upgrades', () => apps.upgrades());
+handle('apps:catalogue', () => apps.catalogue());
+handle('apps:upgrade', (items) => apps.upgrade(items, progress('apps:progress')));
+handle('apps:install', (ids) => apps.install(ids, progress('apps:progress')));
+handle('apps:browse', (options) => apps.browse(options));
+handle('apps:details', (id) => apps.details(id));
+handle('apps:stop', () => apps.stop());
+handle('apps:repair', () => apps.repairWinget());
+handle('malware:read', () => malware.read());
+handle('malware:scan', (kind) => malware.scan(kind, progress('malware:progress')));
+handle('malware:stop', () => malware.stopScan());
 handle('settings:get', () => settingsView());
 handle('settings:set', (key, value) => {
   settings.setPref(key, value);
@@ -414,6 +476,11 @@ app.on('will-quit', (event) => {
   }
   network.stopAll();
   repair.stopAll();
+  malware.stopScan();
+  apps.kill();
+  kit.stop();
+  stress.stop('you');
+  if (portable.active()) portable.removeTempFiles();
   ps.dispose();
 });
 

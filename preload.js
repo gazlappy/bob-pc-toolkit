@@ -226,6 +226,73 @@ contextBridge.exposeInMainWorld('pc', {
     },
   },
 
+  usb: {
+    status: () => call('usb:status'),
+    enable: () => call('usb:enable'),
+    disable: () => call('usb:disable'),
+    removeLeftovers: () => call('usb:removeLeftovers'),
+    removeLocal: () => call('usb:removeLocal'),
+  },
+
+  stress: {
+    drives: () => call('stress:drives'),
+    disk: (letter) => call('stress:disk', letter),
+    load: (options) => call('stress:load', options),
+    stop: () => call('stress:stop'),
+    verdict: (parts) => call('stress:verdict', parts),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('stress:progress', listener);
+      return () => ipcRenderer.removeListener('stress:progress', listener);
+    },
+    onDisk: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('stress:disk', listener);
+      return () => ipcRenderer.removeListener('stress:disk', listener);
+    },
+  },
+
+  kit: {
+    plan: () => call('kit:plan'),
+    measure: (id) => call('kit:measure', id),
+    choose: () => call('kit:choose'),
+    build: (job) => call('kit:build', job),
+    stop: () => call('kit:stop'),
+    reveal: () => call('kit:reveal'),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('kit:progress', listener);
+      return () => ipcRenderer.removeListener('kit:progress', listener);
+    },
+  },
+
+  apps: {
+    upgrades: () => call('apps:upgrades'),
+    catalogue: () => call('apps:catalogue'),
+    upgrade: (items) => call('apps:upgrade', items),
+    install: (ids) => call('apps:install', ids),
+    stop: () => call('apps:stop'),
+    repair: () => call('apps:repair'),
+    browse: (options) => call('apps:browse', options),
+    details: (id) => call('apps:details', id),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('apps:progress', listener);
+      return () => ipcRenderer.removeListener('apps:progress', listener);
+    },
+  },
+
+  malware: {
+    read: () => call('malware:read'),
+    scan: (kind) => call('malware:scan', kind),
+    stop: () => call('malware:stop'),
+    onProgress: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('malware:progress', listener);
+      return () => ipcRenderer.removeListener('malware:progress', listener);
+    },
+  },
+
   backups: {
     list: () => call('backup:list'),
     restore: (id) => call('backup:restore', id),
