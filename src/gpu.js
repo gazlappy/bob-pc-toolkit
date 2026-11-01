@@ -388,14 +388,18 @@ Get-ChildItem -Path $classKey -ErrorAction SilentlyContinue | ForEach-Object {
 $list = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.PNPDeviceID -like 'PCI\\*' } | ForEach-Object {
   $pnp = [string]$_.PNPDeviceID
   $bytes = $null
-  foreach ($k in $vram.Keys) { if ($pnp.ToUpper().StartsWith($k)) { $bytes = $vram[$k]; break } }
-  if (-not $bytes -and $_.AdapterRAM) { $bytes = [uint64][uint32]$_.AdapterRAM }
+  $best = ''
+  foreach ($k in $vram.Keys) { if ($pnp.ToUpper().StartsWith($k) -and $k.Length -gt $best.Length) { $best = $k } }
+  if ($best) { $bytes = $vram[$best] }
+  $capped = $false
+  if (-not $bytes -and $_.AdapterRAM) { $bytes = [uint64][uint32]$_.AdapterRAM; $capped = $bytes -ge 4293918720 }
   [pscustomobject]@{
     name    = [string]$_.Name
     pnp     = $pnp
     driver  = [string]$_.DriverVersion
     date    = if ($_.DriverDate) { $_.DriverDate.ToString('yyyy-MM-dd') } else { '' }
     vram    = $bytes
+    vramCapped = $capped
     mode    = [string]$_.VideoModeDescription
     refresh = [int]$_.CurrentRefreshRate
     status  = [string]$_.Status
@@ -418,6 +422,7 @@ async function adapters() {
     driver: a.driver,
     driverDate: a.date,
     vram: Number(a.vram) || null,
+    vramCapped: Boolean(a.vramCapped),
     mode: a.mode,
     refresh: a.refresh || null,
     status: a.status,

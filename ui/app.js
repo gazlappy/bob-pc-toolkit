@@ -55,6 +55,11 @@ function formatBytes(bytes) {
   return `${size < 10 && unit > 0 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`;
 }
 
+// Windows' older figure stops just under 4 GB; if that is all there is, say so.
+function videoMemory(gpu) {
+  return gpu.vramCapped ? '4 GB or more' : formatBytes(gpu.vram);
+}
+
 function formatDate(ms) {
   return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
@@ -1955,7 +1960,7 @@ function renderSystem() {
         title: 'Graphics',
         hero: gpu.name,
         rows: [
-          ['Memory', gpu.vram ? formatBytes(gpu.vram) : null],
+          ['Memory', gpu.vram ? videoMemory(gpu) : null],
           ['Resolution', gpu.resolution],
           ['Driver', gpu.driverVersion ? `${gpu.driverVersion}${gpu.driverDate ? ` (${formatDay(gpu.driverDate)})` : ''}` : null],
         ],
@@ -1995,7 +2000,7 @@ function buildSystemReport() {
   lines.push(`CPU        ${info.cpu.name} (${info.cpu.cores}c/${info.cpu.threads}t)`);
   lines.push(`RAM        ${formatBytes(info.memory.total)} (${info.memory.slotsUsed}/${info.memory.slotsTotal} slots)`);
   for (const m of info.memory.modules) lines.push(`             ${m.slot}: ${formatBytes(m.capacity)} ${m.speed}MHz ${m.manufacturer} ${m.partNumber}`.trimEnd());
-  for (const g of info.gpus.filter((x) => x.vram)) lines.push(`GPU        ${g.name}${g.vram ? ` (${formatBytes(g.vram)})` : ''} driver ${g.driverVersion}`);
+  for (const g of info.gpus.filter((x) => x.vram)) lines.push(`GPU        ${g.name}${g.vram ? ` (${videoMemory(g)})` : ''} driver ${g.driverVersion}`);
   lines.push('Drives:');
   for (const d of info.disks) {
     let line = `             ${d.name} — ${formatBytes(d.size)} ${d.media || ''}/${d.bus || ''} — ${d.health}`;
@@ -2421,7 +2426,7 @@ function gpuPowerPanel(card) {
   }
   panel.append(actions);
 
-  const notes = [`Range ${lo}–${hi} W${def != null ? ` · default ${def} W` : ''}. Lower runs cooler and quieter for a little less speed. Lasts until the PC restarts.`];
+  const notes = [`Range ${lo}–${hi} W${def != null ? ` · default ${def} W` : ''}. Lower runs cooler and quieter for a little less speed. Windows usually keeps it after a restart, but a driver update can reset it, and it does not travel with the card.`];
   if (!state.admin) notes.unshift('Needs administrator rights — restart as admin to change it.');
   panel.append(el('div', 'gpu-ctrl-note', notes.join(' ')));
   return panel;
@@ -2625,7 +2630,7 @@ function otherGpuCard(a, nvidia) {
   head.append(tags);
   node.append(head);
   node.append(el('div', 'bl-meta', [
-    a.vram ? `${formatBytes(a.vram)} video memory` : '',
+    a.vram ? `${videoMemory(a)} video memory` : '',
     a.mode,
     a.refresh ? `${a.refresh} Hz` : '',
     a.driverDate ? `driver dated ${a.driverDate}` : '',

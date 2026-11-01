@@ -69,6 +69,7 @@ const THEME_FRAME = {
   black: { color: '#000000', symbolColor: '#98a2b1' },
   slate: { color: '#1f242b', symbolColor: '#a8b2bf' },
   workshop: { color: '#14110d', symbolColor: '#aea391' },
+  neon: { color: '#0b0716', symbolColor: '#b4a7d6' },
 };
 
 function resolvedTheme() {

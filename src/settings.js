@@ -36,7 +36,7 @@ function set(key, value) {
 // back to the default, so a damaged file can never feed a bad value to a feature.
 const isBool = (v) => typeof v === 'boolean';
 const PREFS = {
-  theme: { def: 'dark', ok: (v) => ['system', 'dark', 'light', 'black', 'slate', 'workshop'].includes(v) },
+  theme: { def: 'dark', ok: (v) => ['system', 'dark', 'light', 'black', 'slate', 'workshop', 'neon'].includes(v) },
   startView: { def: 'home', ok: (v) => v === 'home' || v === 'last' },
   lastView: { def: 'overview', ok: (v) => typeof v === 'string' && /^[a-z]{2,20}$/.test(v) },
   autoCheckUpdates: { def: true, ok: isBool },

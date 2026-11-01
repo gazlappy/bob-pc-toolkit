@@ -36,12 +36,26 @@ $modules = @(Get-CimInstance Win32_PhysicalMemory | ForEach-Object {
 })
 
 # --- graphics -------------------------------------------------------------
+# AdapterRAM is 32-bit, so it tops out just under 4 GB. The driver's own figure is
+# in the registry. That also keeps entries for cards since removed, so match the
+# installed card's hardware ID, most specific entry first.
+$vramKeys = @(Get-ChildItem -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}' -ErrorAction SilentlyContinue | ForEach-Object {
+  $p = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+  if ($p -and $p.MatchingDeviceId -and $p.'HardwareInformation.qwMemorySize') {
+    [pscustomobject]@{ id = ([string]$p.MatchingDeviceId).ToUpper(); bytes = [double]$p.'HardwareInformation.qwMemorySize' }
+  }
+} | Sort-Object { $_.id.Length } -Descending)
 $gpus = @(Get-CimInstance Win32_VideoController | Where-Object { $_.Name } | ForEach-Object {
+  $pnp = ([string]$_.PNPDeviceID).ToUpper()
+  $known = @($vramKeys | Where-Object { $pnp.StartsWith($_.id) } | Select-Object -First 1)
+  $adapterRam = [double]$_.AdapterRAM
   [pscustomobject]@{
     name          = [string]$_.Name
     driverVersion = [string]$_.DriverVersion
     driverDate    = Safe { $_.DriverDate.ToString('yyyy-MM-dd') }
-    vram          = [double]$_.AdapterRAM
+    vram          = $(if ($known.Count) { $known[0].bytes } else { $adapterRam })
+    # Only the 32-bit figure, and it is at its ceiling: the real size is unknown.
+    vramCapped    = (-not $known.Count) -and ($adapterRam -ge 4293918720)
     resolution    = if ($_.CurrentHorizontalResolution) { "$($_.CurrentHorizontalResolution) x $($_.CurrentVerticalResolution)" } else { $null }
   }
 })
