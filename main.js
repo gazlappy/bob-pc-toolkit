@@ -260,8 +260,8 @@ handle('report:open', async () => {
   await shell.openPath(file);
   return { path: file };
 });
-handle('tweaks:galleryStatus', () => tweaks.galleryStatus());
-handle('tweaks:setGalleryHidden', (hidden) => tweaks.setGalleryHidden(hidden));
+handle('tweaks:list', () => tweaks.list());
+handle('tweaks:set', (id, on) => tweaks.set(id, on));
 handle('tweaks:restartExplorer', () => tweaks.restartExplorer());
 handle('gpu:status', () => gpu.status());
 handle('gpu:sample', () => gpu.sample());

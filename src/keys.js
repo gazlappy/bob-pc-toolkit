@@ -45,6 +45,7 @@ $dpidB64 = if ($dpid) { [Convert]::ToBase64String([byte[]]$dpid) } else { $null 
   oemKey        = [string]$slsvc.OA3xOriginalProductKey
   oemKeyChannel = [string]$slsvc.OA3xOriginalProductKeyDescription
   edition       = [string]$nt.ProductName
+  caption       = [string](Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
   editionId     = [string]$nt.EditionID
   digitalId     = [string]$nt.DigitalProductId4  # contains the licence channel text
   dpidBase64    = $dpidB64
@@ -146,7 +147,8 @@ async function read() {
     : null;
 
   const windows = {
-    edition: data.edition || null,
+    // The registry name still reads "Windows 10" on Windows 11; Windows' own caption is right.
+    edition: String(data.caption || '').replace(/^Microsoft\s+/, '').trim() || data.edition || null,
     status: data.winStatus != null ? CHANNEL_STATUS[data.winStatus] || 'Unknown' : null,
     channel: channelOf(data.winChannel),
     partialKey: partial,

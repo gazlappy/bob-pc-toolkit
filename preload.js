@@ -86,8 +86,8 @@ contextBridge.exposeInMainWorld('pc', {
   },
 
   tweaks: {
-    galleryStatus: () => call('tweaks:galleryStatus'),
-    setGalleryHidden: (hidden) => call('tweaks:setGalleryHidden', hidden),
+    list: () => call('tweaks:list'),
+    set: (id, on) => call('tweaks:set', id, on),
     restartExplorer: () => call('tweaks:restartExplorer'),
   },
 

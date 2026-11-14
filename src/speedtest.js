@@ -64,8 +64,18 @@ async function measureLatency(emit) {
     }
     emit({ phase: 'latency', pct: (i + 1) / LATENCY_SAMPLES });
   }
-  const s = stats(rtts);
-  return { latencyMs: s.avg, jitterMs: s.jitter, samples: rtts.length };
+  // A real ping is the figure people mean. The web requests above include the
+  // server's own thinking time, and one stalled request used to triple the average,
+  // so they are only the fallback for networks that block ping, and use the middle value.
+  const icmp = await pingStats('1.1.1.1', 6).catch(() => null);
+  if (icmp && icmp.times.length >= 3) {
+    const p = stats(icmp.times);
+    return { latencyMs: p.avg, jitterMs: p.jitter, samples: icmp.times.length };
+  }
+  const sorted = rtts.slice().sort((a, b) => a - b);
+  const middle = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+  const steps = rtts.slice(1).map((v, i) => Math.abs(v - rtts[i])).sort((a, b) => a - b);
+  return { latencyMs: middle, jitterMs: steps.length ? steps[Math.floor(steps.length / 2)] : 0, samples: rtts.length };
 }
 
 async function measureDownload(emit) {

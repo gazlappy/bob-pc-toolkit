@@ -9,6 +9,7 @@
 // the device's PnP id.
 
 const ps = require('./ps');
+const devclass = require('./devclass');
 
 // ConfigManagerErrorCode → what it means for a technician. Only the codes that
 // actually turn up are spelled out; the rest fall back to a generic line.
@@ -83,7 +84,7 @@ async function list() {
     .filter((r) => r.name)
     .map((r) => ({
       name: r.name,
-      class: r.class || 'Other',
+      class: devclass.nice(r.class),
       manufacturer: r.manufacturer || null,
       errorCode: r.error || 0,
       problem: r.error ? ERROR_TEXT[r.error] || `Reported a problem (code ${r.error}).` : null,

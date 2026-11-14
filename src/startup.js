@@ -187,6 +187,8 @@ function expandEnvironment(value) {
   });
 }
 
+const HOSTS = /\\(cmd|powershell|pwsh|wscript|cscript|mshta|rundll32|regsvr32|msiexec|conhost|explorer)\.exe$/i;
+
 // Pulls the executable out of a command line such as:  "C:\a b\x.exe" --flag
 function executableFrom(command) {
   const text = expandEnvironment(command).trim();
@@ -351,7 +353,16 @@ async function list() {
     entry.publisher = entry.publisher || detail.publisher || '';
     entry.product = entry.kind === 'packaged' ? '' : detail.product || '';
     entry.running = running[entry.executable.toLowerCase()] || null;
-    entry.missing = entry.executable ? detail.exists === false : false;
+    // A Store app is installed if Windows lists it, whatever its folder lets BOB see.
+    entry.missing = entry.kind !== 'packaged' && entry.executable ? detail.exists === false : false;
+    // cmd, PowerShell and friends run something else, so their own name and whether
+    // one happens to be open say nothing about this entry.
+    entry.host = HOSTS.test(entry.executable);
+    if (entry.host) {
+      entry.product = '';
+      entry.running = null;
+    }
+    entry.runOnce = /runonce/.test(entry.locationId);
     entry.icon = icons.get(entry.executable.toLowerCase()) || null;
     cache.set(entry.id, entry);
   }

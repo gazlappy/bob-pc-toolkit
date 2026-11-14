@@ -129,13 +129,17 @@ function send(child, script, timeout) {
   });
 }
 
+let lastError = '';
+
 /** Runs a script and resolves with its stdout. Calls are serialised. */
 function run(script, { timeout = 180000 } = {}) {
   const attempt = async () => {
     const child = ensureHost();
     if (!child) return runOnce(script, timeout);
     try {
-      const { stdout } = await send(child, script, timeout);
+      const { stdout, stderr } = await send(child, script, timeout);
+      // A script that died says why on stderr. Kept so a failed read can report it.
+      lastError = stdout.trim() ? '' : String(stderr || '').trim().split('\n')[0].trim();
       return stdout;
     } catch (error) {
       if (/timed out/i.test(error.message)) throw error;
@@ -220,4 +224,4 @@ async function mutate(body, options) {
   return true;
 }
 
-module.exports = { run, json, arr, payload, guarded, mutate, warmUp, dispose };
+module.exports = { run, json, arr, payload, guarded, mutate, warmUp, dispose, lastError: () => lastError };

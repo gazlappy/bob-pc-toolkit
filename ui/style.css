@@ -724,7 +724,7 @@ body {
 
 .health-pill.ok {
   background: var(--good-soft);
-  color: var(--good);
+  color: var(--good-text);
 }
 
 .health-pill.warn {
@@ -877,7 +877,7 @@ body {
 }
 
 .mon-row .m-name .cnt {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -920,7 +920,7 @@ body {
 }
 
 .dev-group-head .chev {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 11px;
   width: 12px;
   transition: transform 0.12s ease;
@@ -935,7 +935,7 @@ body {
 }
 
 .dev-group-head .cnt {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -1092,12 +1092,12 @@ body {
 
 .ev-level.err {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .ev-level.warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: color-mix(in srgb, var(--warn) 70%, var(--text));
 }
 
 .ev-src {
@@ -1108,7 +1108,7 @@ body {
 
 .ev-count {
   margin-left: auto;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
@@ -1471,7 +1471,7 @@ h2 {
 
 /* A destructive action that should not shout until it is needed. */
 .btn-danger-text {
-  color: var(--danger);
+  color: var(--danger-text);
   border-color: transparent;
 }
 
@@ -2846,7 +2846,7 @@ select:focus {
 }
 
 .btn-danger-text:not(:disabled) {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* Toolbox ------------------------------------------------------------------ */
@@ -4249,4 +4249,25 @@ select:focus {
 
 .results-note {
   margin-top: 10px;
+}
+
+/* Explorer tweaks ----------------------------------------------------------- */
+.tweaks {
+  margin-top: 8px;
+}
+
+.tweak-group {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tweak-row {
+  align-items: center;
+}
+
+.tweak-desc {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12.5px;
 }

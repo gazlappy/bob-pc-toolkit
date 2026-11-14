@@ -76,7 +76,7 @@ function buildHtml(data, options = {}) {
     row('Motherboard', machine.board || '—'),
     row('BIOS', machine.biosVersion ? `${machine.biosVersion} (${machine.biosDate || ''})` : '—'),
     row('Processor', cpu.name || '—'),
-    row('Memory', `${gib(mem.total)}${mem.slotsUsed ? ` · ${mem.slotsUsed}/${mem.slotsTotal} slots` : ''}`),
+    row('Memory', `${Math.round((Number(mem.total) || 0) / 1073741824)} GB${mem.slotsUsed ? ` · ${mem.slotsUsed}/${mem.slotsTotal} slots` : ''}`),
     row('Graphics', gpus.map((g) => g.name).filter(Boolean).join(', ') || '—'),
     row('Installed', os.installedOn || '—'),
     row('Computer name', os.computerName || sys.hostname || '—'),

@@ -78,7 +78,6 @@
             <button class="tab" data-view="running">Running now</button>
             <button class="tab" data-view="programs">Programs<span class="nav-count" id="nav-programs-count"></span></button>
             <button class="tab" data-view="apps">App updates<span class="nav-count" id="nav-apps-count"></span></button>
-            <button class="tab" data-view="explorer">Explorer tweaks</button>
           </div>
           <div class="tabs" data-section="hardware" data-title="Hardware" hidden>
             <button class="tab" data-view="system">System info</button>
@@ -138,12 +137,12 @@
             <button class="tile" data-goto="startup">
               <div class="tile-value" id="tile-startup">—</div>
               <div class="tile-label">Programs running at startup</div>
-              <div class="tile-note" id="tile-startup-note">Tap to review them</div>
+              <div class="tile-note" id="tile-startup-note">Counting…</div>
             </button>
             <button class="tile" data-goto="cleanup">
               <div class="tile-value" id="tile-cleanup">—</div>
               <div class="tile-label">Junk found on this PC</div>
-              <div class="tile-note" id="tile-cleanup-note">Scan to find out</div>
+              <div class="tile-note" id="tile-cleanup-note">Measuring…</div>
             </button>
             <button class="tile" data-goto="files">
               <div class="tile-value" id="tile-files">—</div>
@@ -300,21 +299,6 @@
         </section>
 
         <!-- Explorer tweaks -->
-        <section class="view" id="view-explorer">
-          <header class="view-head">
-            <div>
-              <h1>Explorer tweaks</h1>
-              <p class="subtitle">Small, per-user, reversible File Explorer changes.</p>
-            </div>
-            <div class="head-actions">
-              <button class="btn btn-ghost" id="explorer-refresh">Refresh</button>
-            </div>
-          </header>
-          <div id="explorer-body">
-            <div class="empty">Reading Explorer settings…</div>
-          </div>
-        </section>
-
         <!-- Large files -->
         <section class="view" id="view-files">
           <header class="view-head">
@@ -818,7 +802,7 @@
           <header class="view-head">
             <div>
               <h1>Toolbox</h1>
-              <p class="subtitle">Windows' consoles and quick fixes, one click each. Star the ones you use most.</p>
+              <p class="subtitle">Windows' consoles and quick fixes, one click each, with Explorer tweaks underneath. Star the tools you use most.</p>
             </div>
             <div class="head-actions">
               <input class="search" id="toolbox-search" type="search" placeholder="Search tools…" aria-label="Search tools" />

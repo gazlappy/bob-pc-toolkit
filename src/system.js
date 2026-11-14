@@ -166,8 +166,10 @@ $battery = Safe {
 `;
 
 async function info() {
-  const data = await ps.json(INFO_SCRIPT, { timeout: 60000 });
-  if (!data) throw new Error('Could not read system information.');
+  let data = await ps.json(INFO_SCRIPT, { timeout: 60000 });
+  // Windows' hardware database can refuse a query while it is busy. Once more, then say why.
+  if (!data) data = await ps.json(INFO_SCRIPT, { timeout: 60000 });
+  if (!data) throw new Error(`Could not read system information.${ps.lastError() ? ` Windows said: ${ps.lastError()}` : ''}`);
 
   // Uptime is friendlier computed here than formatted in PowerShell.
   let uptimeMs = null;

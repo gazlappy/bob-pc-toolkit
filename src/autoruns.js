@@ -318,7 +318,8 @@ function assess(exe, sign, { alwaysFlag = false, note = '' } = {}) {
   else if (exe && hasPath) {
     const inWindows = path.startsWith(WINDIR);
     if (status !== 'Valid' && !inWindows) reasons.push('not signed / signature not valid');
-    if (USER_WRITABLE.test(exe)) reasons.push('runs from a user-writable folder');
+    // Per-user installs (OneDrive, Teams, Chrome) live there too, so a valid signature clears it.
+    if (USER_WRITABLE.test(exe) && status !== 'Valid') reasons.push('runs from a user-writable folder');
   }
   return {
     publisher,

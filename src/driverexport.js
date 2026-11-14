@@ -13,6 +13,7 @@
 const os = require('os');
 const path = require('path');
 const ps = require('./ps');
+const devclass = require('./devclass');
 
 const LIST_SCRIPT = `
 $drivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue | Where-Object { $_.InfName -like 'oem*.inf' })
@@ -53,20 +54,13 @@ try {
 `;
 }
 
-function niceClass(className) {
-  const c = String(className || '').trim();
-  if (!c) return '';
-  // Win32_PnPSignedDriver reports the class in upper case (e.g. NET, MEDIA).
-  return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
-}
-
 async function list() {
   const rows = ps.arr(await ps.json(LIST_SCRIPT));
   const packages = rows
     .map((r) => ({
       inf: r.inf,
       provider: r.provider || 'Unknown provider',
-      className: niceClass(r.className),
+      className: devclass.nice(r.className),
       version: r.version || '',
       date: r.date || '',
       deviceName: r.deviceName || '',

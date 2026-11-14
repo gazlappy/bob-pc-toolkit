@@ -44,7 +44,7 @@ const state = {
   ghosts: { data: null, loaded: false, selected: new Set(), openGroups: new Set(), busy: false },
   report: { data: null, loaded: false },
   hwtest: { built: false, micStream: null, camStream: null, audioCtx: null, micRaf: null, kbBound: false },
-  explorer: { gallery: null, loaded: false, busy: false, dirty: false },
+  tweaks: { data: null, error: '', dirty: false },
   bitlocker: { data: null, loaded: false, revealed: new Set(), busy: false },
   gpu: { data: null, active: false, timer: null, history: {}, fanMode: {}, busy: false, fanIcons: [], spin: {}, raf: null, lastFrame: 0 },
   update: { config: null, loaded: false, result: null, status: '', busy: false, progress: null },
@@ -210,7 +210,6 @@ function show(view) {
   if (view === 'wifi' && !state.wifi.loaded) loadWifi();
   if (view === 'ghosts' && !state.ghosts.loaded) loadGhosts();
   if (view === 'report' && !state.report.loaded) loadReport();
-  if (view === 'explorer' && !state.explorer.loaded) loadExplorer();
   if (view === 'bitlocker' && !state.bitlocker.loaded) loadBitlocker();
   if (view === 'tuneup' && !state.tuneup.loaded) loadTuneup();
   if (view === 'settings') {
@@ -357,7 +356,7 @@ function startupRow(entry) {
     tag.title = 'The program this points at no longer exists — this entry does nothing.';
     tags.append(tag);
   }
-  if (!entry.publisher && !entry.missing) {
+  if (!entry.publisher && !entry.missing && !entry.host) {
     const tag = document.createElement('span');
     tag.className = 'tag tag-warn';
     tag.textContent = 'Unsigned';
@@ -368,6 +367,18 @@ function startupRow(entry) {
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = 'All users';
+    tags.append(tag);
+  }
+  if (entry.runOnce) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'Runs once';
+    tag.title = 'Windows runs this at the next sign-in, then removes it. Usually an installer finishing off.';
+    tags.append(tag);
+  } else if (!entry.approvable) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = 'Set by policy';
     tags.append(tag);
   }
   const slowed = startupSlowdown(entry);
@@ -441,6 +452,8 @@ function startupRow(entry) {
   const track = document.createElement('span');
   track.className = 'switch-track';
   label.append(input, track);
+  // No switch at all beats one that looks on and can't be moved.
+  label.hidden = !entry.approvable;
 
   input.addEventListener('change', async () => {
     const wanted = input.checked;
@@ -524,10 +537,11 @@ function taskRow(task) {
 }
 
 function updateStartupCounts() {
-  const enabled = state.startup.entries.filter((entry) => entry.enabled).length;
-  $('nav-startup-count').textContent = String(state.startup.entries.length || '');
+  const lasting = state.startup.entries.filter((entry) => !entry.runOnce);
+  const enabled = lasting.filter((entry) => entry.enabled).length;
+  $('nav-startup-count').textContent = String(lasting.length || '');
   $('tile-startup').textContent = String(enabled);
-  const disabled = state.startup.entries.length - enabled;
+  const disabled = lasting.length - enabled;
   $('tile-startup-note').textContent = disabled
     ? `${disabled} already disabled`
     : 'Tap to review them';
@@ -568,9 +582,12 @@ function renderStartup() {
     }
   }
 
-  const enabled = state.startup.entries.filter((entry) => entry.enabled).length;
+  const lasting = state.startup.entries.filter((entry) => !entry.runOnce);
+  const enabled = lasting.filter((entry) => entry.enabled).length;
+  const once = state.startup.entries.length - lasting.length;
   $('startup-subtitle').textContent =
-    `${enabled} of ${state.startup.entries.length} enabled` +
+    `${enabled} of ${lasting.length} enabled` +
+    (once ? ` · ${once} run-once` : '') +
     (state.startup.tasksLoaded
       ? ` · ${state.startup.tasks.filter((task) => !task.builtIn).length} third-party sign-in tasks`
       : '');
@@ -855,7 +872,7 @@ function renderCleanup() {
   }.`;
   $('nav-cleanup-count').textContent = total ? formatBytes(total) : '';
   $('tile-cleanup').textContent = formatBytes(total);
-  $('tile-cleanup-note').textContent = 'Reviewed and ready to clean';
+  $('tile-cleanup-note').textContent = 'Open Cleanup to review it';
   updateCleanupSelection();
 }
 
@@ -4261,8 +4278,10 @@ function renderToolbox() {
   const tools = data.tools.filter((t) => !term || `${t.label} ${t.desc} ${t.group}`.toLowerCase().includes(term));
 
   body.replaceChildren();
+  const tweaks = tweaksSection(term);
   if (!tools.length) {
-    body.replaceChildren(empty('Nothing matches.'));
+    if (tweaks.children.length) body.append(tweaks);
+    else body.replaceChildren(empty('Nothing matches.'));
     return;
   }
 
@@ -4288,7 +4307,7 @@ function renderToolbox() {
     for (const t of tools.filter((x) => x.group === group)) card.append(toolRow(t, Boolean(term)));
     columns.append(card);
   }
-  body.append(columns);
+  body.append(columns, tweaks);
 }
 
 async function loadToolbox() {
@@ -4296,6 +4315,7 @@ async function loadToolbox() {
     state.toolbox.data = await window.pc.toolbox.list();
     state.toolbox.loaded = true;
     renderToolbox();
+    loadTweaks();
   } catch (error) {
     $('toolbox-body').replaceChildren(empty(error.message));
   }
@@ -4416,7 +4436,7 @@ function partitionRow(disk, p) {
   main.className = 'row-main';
   const name = document.createElement('div');
   name.className = 'row-name';
-  name.textContent = `${p.driveLetter ? `${p.driveLetter}:  ` : ''}${p.label || p.type}`;
+  name.textContent = `${p.driveLetter ? `${p.driveLetter}:  ` : ''}${p.label || (p.driveLetter ? 'Local disk' : p.type)}`;
   const meta = document.createElement('div');
   meta.className = 'row-meta';
   meta.textContent = [
@@ -4945,108 +4965,87 @@ $('report-open').addEventListener('click', async () => {
   }
 });
 
-/* Explorer tweaks ---------------------------------------------------------- */
+/* Explorer tweaks (shown under the Toolbox) -------------------------------- */
 
-function renderExplorer() {
-  const body = $('explorer-body');
-  const g = state.explorer.gallery;
-  if (!g) {
-    body.replaceChildren(empty('Reading Explorer settings…'));
-    return;
+async function loadTweaks() {
+  try {
+    state.tweaks.data = await window.pc.tweaks.list();
+  } catch (error) {
+    state.tweaks.error = error.message;
   }
+  if (state.toolbox.data) renderToolbox();
+}
 
-  body.replaceChildren();
-  const card = document.createElement('div');
-  card.className = 'tweak-card';
-
-  const head = document.createElement('div');
-  head.className = 'tweak-head';
-  const title = document.createElement('div');
-  title.className = 'tweak-title';
-  title.textContent = 'File Explorer Gallery';
-  const stateTag = document.createElement('span');
-  if (!g.supported) {
-    stateTag.className = 'tag';
-    stateTag.textContent = 'Windows 11 only';
-  } else {
-    stateTag.className = `tag ${g.hidden ? 'tag-warn' : ''}`;
-    stateTag.textContent = g.hidden ? 'Hidden' : 'Showing';
-  }
-  head.append(title, stateTag);
-
-  const desc = document.createElement('div');
-  desc.className = 'tweak-desc';
-  desc.textContent = g.supported
-    ? 'Windows 11 pins a "Gallery" photo view to the File Explorer sidebar. Hide it to declutter the navigation pane — it is a per-user change you can restore any time, no admin needed.'
-    : `The File Explorer Gallery is a Windows 11 feature. This PC is on build ${g.build}, so there is nothing to remove here.`;
-
-  const actions = document.createElement('div');
-  actions.className = 'tweak-actions';
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = `btn ${g.hidden ? 'btn-ghost' : 'btn-primary'}`;
-  toggleBtn.textContent = state.explorer.busy ? 'Working…' : g.hidden ? 'Restore Gallery' : 'Hide Gallery';
-  toggleBtn.disabled = !g.supported || state.explorer.busy;
-  toggleBtn.addEventListener('click', async () => {
-    state.explorer.busy = true;
-    renderExplorer();
+function tweakRow(tweak) {
+  const row = el('div', 'row tweak-row');
+  const main = el('div', 'row-main');
+  main.append(el('div', 'row-name', tweak.name), el('div', 'tweak-desc', tweak.desc));
+  const label = el('label', 'switch');
+  label.title = tweak.on ? 'On' : 'Off';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = tweak.on;
+  input.setAttribute('aria-label', tweak.name);
+  label.append(input, el('span', 'switch-track'));
+  input.addEventListener('change', async () => {
+    const want = input.checked;
+    input.disabled = true;
     try {
-      await window.pc.tweaks.setGalleryHidden(!g.hidden);
-      state.explorer.gallery = await window.pc.tweaks.galleryStatus();
-      state.explorer.dirty = true;
-      toast(`Gallery ${g.hidden ? 'restored' : 'hidden'}.`, 'good');
+      await window.pc.tweaks.set(tweak.id, want);
+      tweak.on = want;
+      state.tweaks.dirty = true;
+      toast(`${tweak.name}: ${want ? 'on' : 'off'}.`, 'good');
     } catch (error) {
+      input.checked = !want;
       toast(error.message, 'error');
-    } finally {
-      state.explorer.busy = false;
-      renderExplorer();
     }
+    input.disabled = false;
+    renderToolbox();
   });
-  actions.append(toggleBtn);
+  const actions = el('div', 'row-actions');
+  actions.append(label);
+  row.append(main, actions);
+  return row;
+}
 
-  card.append(head, desc, actions);
-
-  // Once changed, the pane only updates when Explorer reloads.
-  if (state.explorer.dirty) {
-    const applyRow = document.createElement('div');
-    applyRow.className = 'tweak-apply';
-    const note = document.createElement('span');
-    note.textContent = 'Restart File Explorer to see the change.';
-    const restart = document.createElement('button');
-    restart.className = 'btn btn-ghost btn-small';
-    restart.textContent = 'Restart Explorer';
+function tweaksSection(term) {
+  const wrap = el('div', 'tweaks');
+  const t = state.tweaks;
+  if (!t.data) {
+    if (term) return wrap;
+    wrap.append(el('div', 'group-title', 'Explorer tweaks'), empty(t.error || 'Reading Explorer settings…'));
+    return wrap;
+  }
+  const shown = t.data.tweaks.filter((x) => !term || `${x.name} ${x.desc} ${x.group} explorer tweak`.toLowerCase().includes(term));
+  if (!shown.length) return wrap;
+  wrap.append(el('div', 'group-title', 'Explorer tweaks'));
+  wrap.append(el('p', 'group-blurb', 'Each switch changes one setting for the person signed in now, and switching it back off undoes it. Nothing here affects other accounts.'));
+  if (t.dirty) {
+    const bar = el('div', 'selection-bar');
+    bar.append(el('span', '', 'Most of these show once File Explorer restarts. Open folders will close.'));
+    const restart = el('button', 'btn btn-primary btn-small', 'Restart Explorer');
     restart.addEventListener('click', async () => {
+      restart.disabled = true;
       try {
         await window.pc.tweaks.restartExplorer();
-        state.explorer.dirty = false;
+        t.dirty = false;
         toast('File Explorer restarted.', 'good');
-        renderExplorer();
       } catch (error) {
         toast(error.message, 'error');
       }
+      renderToolbox();
     });
-    applyRow.append(note, restart);
-    card.append(applyRow);
+    bar.append(restart);
+    wrap.append(bar);
   }
-
-  body.append(card);
-}
-
-async function loadExplorer() {
-  state.explorer.loaded = false;
-  state.explorer.dirty = false;
-  renderExplorer();
-  try {
-    state.explorer.gallery = await window.pc.tweaks.galleryStatus();
-    state.explorer.loaded = true;
-    renderExplorer();
-  } catch (error) {
-    state.explorer.loaded = true;
-    $('explorer-body').replaceChildren(empty(error.message));
-    toast(error.message, 'error');
+  for (const group of [...new Set(shown.map((x) => x.group))]) {
+    wrap.append(el('div', 'tweak-group', group));
+    const list = el('div', 'list');
+    for (const tweak of shown.filter((x) => x.group === group)) list.append(tweakRow(tweak));
+    wrap.append(list);
   }
+  return wrap;
 }
-
-$('explorer-refresh').addEventListener('click', loadExplorer);
 
 /* BitLocker ---------------------------------------------------------------- */
 
@@ -7432,7 +7431,7 @@ const RESULT_ROWS = [
   { label: 'Programs starting with Windows', from: (s) => s.readings && s.readings.startupOn, show: String, word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => String(n), good: -1 },
   { label: 'Dead registry entries', from: (s) => s.readings && s.readings.registryDead, show: (n) => n.toLocaleString(), word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => n.toLocaleString(), good: -1 },
   { label: 'Programs running now', from: (s) => s.readings && s.readings.running, show: String, word: (d) => (d < 0 ? 'fewer' : 'more'), diff: (n) => String(n), good: -1 },
-  { label: 'Memory in use', note: 'Moves up and down with whatever is open.', from: (s) => s.readings && s.readings.memUsed, show: formatBytes, word: (d) => (d < 0 ? 'less' : 'more'), diff: formatBytes, good: -1, small: 100 * 1048576 },
+  { label: 'Memory in use', note: 'Moves up and down with whatever is open.', from: (s) => s.readings && s.readings.memUsed, show: formatBytes, word: (d) => (d < 0 ? 'less' : 'more'), diff: formatBytes, good: -1, small: 512 * 1048576 },
   { label: 'Free space on the Windows drive', from: (s) => s.readings && s.readings.diskFree, show: formatBytes, word: (d) => (d > 0 ? 'more' : 'less'), diff: formatBytes, good: 1, small: 100 * 1048576 },
 ];
 
@@ -7715,7 +7714,10 @@ function renderRunning() {
   // Rows only move when the pointer is elsewhere, so a button can't slide away mid-click.
   const inOrder = [...list.children].length === wanted.length && wanted.every((row, i) => list.children[i] === row);
   if (!inOrder && !list.matches(':hover')) list.replaceChildren(...wanted);
-  else if (!inOrder) for (const row of wanted) if (!row.isConnected) list.append(row);
+  else if (!inOrder) {
+    for (const child of [...list.children]) if (!wanted.includes(child)) child.remove();
+    for (const row of wanted) if (!row.isConnected) list.append(row);
+  }
   if (!wanted.length) list.replaceChildren(empty('Nothing matches.'));
   const total = v.rows.reduce((sum, r) => sum + r.mem, 0);
   $('running-subtitle').textContent = `${v.rows.length} programs and parts of Windows, using ${formatBytes(total)} of memory. Updates every 3 seconds.`;
@@ -9074,7 +9076,6 @@ const FINDER_WORDS = {
   kit: 'backup reinstall wipe format factory reset documents desktop pictures bookmarks save customer data usb before',
   apps: 'update upgrade outdated winget software programs',
   install: 'ninite browse search catalogue new pc setup install software programs apps winget chrome firefox 7-zip vlc adobe reader zoom office libreoffice teamviewer steam',
-  explorer: 'file extensions hidden files context menu right click taskbar',
   system: 'specs model serial motherboard bios cpu ram memory processor windows version activation',
   devices: 'device manager driver error yellow unknown code problem',
   disks: 'partition drive ssd hdd smart health format volume',
@@ -9096,7 +9097,7 @@ const FINDER_WORDS = {
   report: 'customer print summary pdf export health',
   events: 'crash bsod blue screen error log reliability freeze restart',
   repair: 'sfc dism chkdsk corrupt broken system files fix windows',
-  toolbox: 'console run command tools regedit cmd services',
+  toolbox: 'console run command tools regedit cmd services explorer tweaks file extensions hidden files right click menu taskbar start gallery seconds clock',
   backups: 'restore undo quarantine restore point',
   settings: 'theme dark light colours options preferences usb portable stick traces leftovers temp',
   update: 'new version latest',
@@ -9250,6 +9251,11 @@ setTimeout(hideBoot, 6000);
 
 loadRoots();
 loadBackups();
+// Home's tiles would otherwise sit on a dash until each tab had been opened.
+setTimeout(() => {
+  if (!state.startup.entries.length) loadStartup();
+  if (!state.cleanup.scanned) scanCleanup();
+}, 1500);
 renderFiles();
 renderRegistry();
 renderDupes();
